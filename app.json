@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "islami-app",
-    "slug": "islami-app",
+    "name": "Islami App",
+    "slug": "islamiapp",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
@@ -16,11 +16,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.yourcompany.islamiapp",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Bu uygulama, namaz vakitlerini ve kıble yönünü göstermek için konum bilginizi kullanır.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "Bu uygulama, namaz vakitlerini ve kıble yönünü göstermek için konum bilginizi kullanır.",
-        "UIBackgroundModes": ["location", "fetch"]
+        "UIBackgroundModes": ["remote-notification"]
       }
     },
     "android": {
@@ -28,32 +25,30 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.yourcompany.islamiapp",
       "permissions": [
-        "ACCESS_COARSE_LOCATION",
-        "ACCESS_FINE_LOCATION",
-        "ACCESS_BACKGROUND_LOCATION"
-      ],
-      "versionCode": 1
+        "android.permission.VIBRATE"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-location",
-      "expo-sensors"
-    ],
-    "newArchEnabled": true,
-    "extra": {
-      "eas": {
-        "projectId": "your-project-id"
-      }
-    },
-    "runtimeVersion": {
-      "policy": "sdkVersion"
-    },
-    "updates": {
-      "url": "https://u.expo.dev/your-project-id"
-    }
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#00897B",
+          "defaultChannel": "ezan-vakitleri",
+          "sounds": ["./assets/notification-sound.wav"],
+          "enableBackgroundRemoteNotifications": false
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "$(PRODUCT_NAME) konum bilginizi namaz vakitlerini doğru şekilde belirlemek için kullanır."
+        }
+      ]
+    ]
   }
-}
+} 

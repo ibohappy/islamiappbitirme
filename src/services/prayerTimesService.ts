@@ -1,5 +1,6 @@
 import { Alert } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Yeni API URL'leri
 const API_BASE_URL = 'https://vakit.vercel.app/api';
@@ -104,6 +105,14 @@ export interface PrayerTimeData {
   name: string;
   time: string;
   isNext: boolean;
+}
+
+export interface WeeklyPrayerTimes {
+  date: string; // YYYY-MM-DD formatında
+  formattedDate: string; // DD Ayın Adı formatında
+  dayName: string; // Günün adı (Pazartesi, Salı, vb.)
+  times: PrayerTimeData[];
+  isToday: boolean;
 }
 
 export interface CityData {
@@ -318,76 +327,263 @@ function findNearestCity(latitude: number, longitude: number): string {
   return distances[0].city;
 }
 
-// Namaz vakitlerini getirme
-export const fetchPrayerTimes = async (city: string): Promise<PrayerTimeData[] | null> => {
+// Tarih formatı oluşturan fonksiyon
+function formatDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// Belirli bir tarih aralığı için namaz vakitlerini getirme
+export const fetchPrayerTimesRange = async (city: string, daysBack = 7, daysForward = 7): Promise<WeeklyPrayerTimes[]> => {
   try {
-    console.log(`${city} için namaz vakitleri getiriliyor...`);
+    console.log(`${city} için ${daysBack} gün öncesinden ${daysForward} gün sonrasına kadar namaz vakitleri getiriliyor...`);
     
     if (!city || typeof city !== 'string') {
       console.error('Geçersiz şehir adı:', city);
-      return getDefaultPrayerTimes('İstanbul');
+      return getDefaultPrayerTimesRange(city, daysBack, daysForward);
     }
     
-    // Bugünün tarihini al
+    // Bugünü ve istenen tarih aralığını hesapla
     const today = new Date();
-    const dateString = today.toISOString().split('T')[0]; // YYYY-MM-DD formatı
+    const startDate = new Date(today);
+    startDate.setDate(today.getDate() - daysBack);
+    
+    const endDate = new Date(today);
+    endDate.setDate(today.getDate() + daysForward);
     
     // Zaman dilimi farkını hesapla (dakika cinsinden)
     const timezoneOffset = today.getTimezoneOffset() * -1;
     
-    // API isteği için parametreleri hazırla
-    const params = new URLSearchParams({
-      country: 'Turkey',
-      region: city,
-      city: city,
-      date: dateString,
-      days: '1',
-      timezoneOffset: timezoneOffset.toString(),
-      calculationMethod: CALCULATION_METHOD
-    });
+    // Birleştirilecek tüm vakitleri tutacak dizi
+    const allTimes: WeeklyPrayerTimes[] = [];
     
-    console.log('API isteği yapılıyor:', `${API_TIMES_FROM_PLACE}?${params.toString()}`);
-    
+    // API geçmiş ve gelecek vakitleri için ayrı istekler yap
     try {
-      // API isteği yap
-      const response = await fetch(`${API_TIMES_FROM_PLACE}?${params.toString()}`);
-      
-      if (!response.ok) {
-        console.error('API yanıt kodu:', response.status);
-        throw new Error(`API isteği başarısız: ${response.status}`);
+      // Geçmiş için istek
+      if (daysBack > 0) {
+        const pastParams = new URLSearchParams({
+          country: 'Turkey',
+          region: city,
+          city: city,
+          date: formatDateString(startDate),
+          days: (daysBack + 1).toString(), // Bugün dahil
+          timezoneOffset: timezoneOffset.toString(),
+          calculationMethod: CALCULATION_METHOD
+        });
+        
+        console.log('Geçmiş için API isteği yapılıyor:', `${API_TIMES_FROM_PLACE}?${pastParams.toString()}`);
+        
+        const pastResponse = await fetch(`${API_TIMES_FROM_PLACE}?${pastParams.toString()}`);
+        
+        if (!pastResponse.ok) {
+          console.error('Geçmiş için API yanıt kodu:', pastResponse.status);
+          throw new Error(`Geçmiş için API isteği başarısız: ${pastResponse.status}`);
+        }
+        
+        const pastData = await pastResponse.json();
+        if (pastData.times) {
+          const pastTimes = processPrayerTimes(pastData.times, today);
+          allTimes.push(...pastTimes);
+        }
       }
       
-      const data = await response.json();
-      console.log('API yanıtı alındı:', data);
-      
-      // Hata kontrolü
-      if (data.error) {
-        console.error('API hatası:', data.error);
-        throw new Error(data.error);
+      // Gelecek için istek
+      if (daysForward > 0) {
+        const futureParams = new URLSearchParams({
+          country: 'Turkey',
+          region: city,
+          city: city,
+          date: formatDateString(today),
+          days: (daysForward + 1).toString(), // Bugün dahil
+          timezoneOffset: timezoneOffset.toString(),
+          calculationMethod: CALCULATION_METHOD
+        });
+        
+        console.log('Gelecek için API isteği yapılıyor:', `${API_TIMES_FROM_PLACE}?${futureParams.toString()}`);
+        
+        const futureResponse = await fetch(`${API_TIMES_FROM_PLACE}?${futureParams.toString()}`);
+        
+        if (!futureResponse.ok) {
+          console.error('Gelecek için API yanıt kodu:', futureResponse.status);
+          throw new Error(`Gelecek için API isteği başarısız: ${futureResponse.status}`);
+        }
+        
+        const futureData = await futureResponse.json();
+        if (futureData.times) {
+          const futureTimes = processPrayerTimes(futureData.times, today);
+          
+          // Eğer geçmiş veriler yoksa veya geçmiş verilerde bugün yoksa,
+          // bugünü gelecek verilerden ekleyelim
+          if (allTimes.length === 0 || !allTimes.some(t => t.isToday)) {
+            allTimes.push(...futureTimes);
+          } else {
+            // Bugünü hariç tut (zaten geçmiş verilerden alınmış olabilir)
+            allTimes.push(...futureTimes.filter(t => !t.isToday));
+          }
+        }
       }
       
-      // Veri formatı kontrolü
-      if (!data.times || !data.place) {
-        console.error('API yanıtı geçersiz format');
-        throw new Error('API yanıtı geçersiz format');
+      // Tüm vakitleri tarihe göre sırala
+      allTimes.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+      
+      // Duplike günleri kaldır
+      const uniqueTimes = allTimes.filter((time, index, self) => 
+        index === self.findIndex(t => t.date === time.date)
+      );
+      
+      // Context7 best practice: Veriyi storage'a kaydet
+      if (uniqueTimes.length > 0) {
+        await savePrayerTimesToStorage(city, uniqueTimes);
       }
       
-      // Bugünün tarihini al
-      const todayKey = Object.keys(data.times)[0];
+      return uniqueTimes;
       
-      if (!todayKey || !data.times[todayKey] || !Array.isArray(data.times[todayKey])) {
-        console.error('API yanıtında bugünün verileri bulunamadı');
-        throw new Error('API yanıtında bugünün verileri bulunamadı');
-      }
-      
-      // Namaz vakitlerini oluştur
-      const prayerTimes = createPrayerTimesFromArray(data.times[todayKey]);
-      return prayerTimes;
-      
-    } catch (error) {
-      console.error('API isteği başarısız, varsayılan veri kullanılıyor:', error);
-      return getDefaultPrayerTimes(city);
+    } catch (apiError) {
+      console.error('API isteği başarısız, varsayılan veri kullanılıyor:', apiError);
+      return getDefaultPrayerTimesRange(city, daysBack, daysForward);
     }
+  } catch (error) {
+    console.error('Namaz vakitleri aralığı alınamadı:', error);
+    return getDefaultPrayerTimesRange(city, daysBack, daysForward);
+  }
+};
+
+// Storage'a namaz vakitlerini kaydet (Context7 standardına uygun)
+const savePrayerTimesToStorage = async (city: string, weeklyTimes: WeeklyPrayerTimes[]) => {
+  try {
+    // Context7 best practice: Eski şehir verilerini temizle
+    await cleanupOldCityData(city);
+    
+    // Veriyi bildirimlerde kullanılacak formata dönüştür
+    const prayerTimesData = weeklyTimes.map(day => ({
+      date: day.date,
+      dayName: day.dayName,
+      times: day.times.map(prayer => ({
+        name: prayer.name,
+        time: prayer.time
+      }))
+    }));
+    
+    // Şehir bazında kaydet
+    await AsyncStorage.setItem(`prayer_times_${city}`, JSON.stringify(prayerTimesData));
+    
+    // Genel bildirim sistemi için de kaydet (background task'lar için)
+    await AsyncStorage.setItem('prayer_times_data', JSON.stringify(prayerTimesData));
+    
+    // Aktif şehri kaydet
+    await AsyncStorage.setItem('current_prayer_city', city);
+    
+    // Son güncelleme zamanını kaydet
+    await AsyncStorage.setItem('last_prayer_times_update', new Date().toISOString());
+    
+    console.log(`Namaz vakitleri storage'a kaydedildi: ${city} (${prayerTimesData.length} gün)`);
+  } catch (error) {
+    console.error('Namaz vakitleri storage\'a kaydedilemedi:', error);
+  }
+};
+
+// Context7 best practice: Eski şehir verilerini temizle
+const cleanupOldCityData = async (currentCity: string) => {
+  try {
+    // Şu anki aktif şehri kontrol et
+    const lastActiveCity = await AsyncStorage.getItem('current_prayer_city');
+    
+    if (lastActiveCity && lastActiveCity !== currentCity) {
+      console.log(`Şehir değişti: ${lastActiveCity} → ${currentCity}, eski veriler temizleniyor...`);
+      
+      // Eski şehir verilerini sil
+      await AsyncStorage.removeItem(`prayer_times_${lastActiveCity}`);
+      
+      // Diğer şehir verilerini de kontrol et ve temizle
+      const allKeys = await AsyncStorage.getAllKeys();
+      const prayerKeys = allKeys.filter(key => 
+        key.startsWith('prayer_times_') && 
+        key !== `prayer_times_${currentCity}` &&
+        key !== 'prayer_times_data'
+      );
+      
+      if (prayerKeys.length > 0) {
+        await AsyncStorage.multiRemove(prayerKeys);
+        console.log('Temizlenen eski şehir verileri:', prayerKeys);
+      }
+    }
+  } catch (error) {
+    console.error('Eski veriler temizlenirken hata:', error);
+  }
+};
+
+// API verilerini işleme fonksiyonu
+function processPrayerTimes(times: Record<string, string[]>, today: Date): WeeklyPrayerTimes[] {
+  const todayStr = formatDateString(today);
+  const processedTimes: WeeklyPrayerTimes[] = [];
+  
+  for (const dateKey of Object.keys(times)) {
+    if (!times[dateKey] || !Array.isArray(times[dateKey])) {
+      console.error(`${dateKey} için geçersiz veri formatı`);
+      continue;
+    }
+    
+    // Tarih ve gün bilgisini hesapla
+    const date = new Date(dateKey);
+    const formattedDate = formatDate(date);
+    const dayName = getDayName(date);
+    const isToday = dateKey === todayStr;
+    
+    // O gün için namaz vakitlerini oluştur
+    const timesForDay = createPrayerTimesFromArray(times[dateKey], isToday);
+    
+    processedTimes.push({
+      date: dateKey,
+      formattedDate,
+      dayName,
+      times: timesForDay,
+      isToday
+    });
+  }
+  
+  return processedTimes;
+}
+
+// Tarihi gün ve ay olarak formatla
+function formatDate(date: Date): string {
+  const day = date.getDate();
+  const monthNames = [
+    'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+    'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık'
+  ];
+  const month = monthNames[date.getMonth()];
+  return `${day} ${month}`;
+}
+
+// Günün adını Türkçe olarak al
+function getDayName(date: Date): string {
+  const days = ['Pazar', 'Pazartesi', 'Salı', 'Çarşamba', 'Perşembe', 'Cuma', 'Cumartesi'];
+  return days[date.getDay()];
+}
+
+// Geriye uyumluluk için haftalık namaz vakitleri getirme
+export const fetchWeeklyPrayerTimes = async (city: string): Promise<WeeklyPrayerTimes[]> => {
+  try {
+    // Yeni fonksiyonu çağırarak sadece gelecek vakitlerini al
+    return await fetchPrayerTimesRange(city, 0, 6);
+  } catch (error) {
+    console.error('Haftalık namaz vakitleri alınamadı:', error);
+    return getDefaultPrayerTimesRange(city, 0, 6);
+  }
+};
+
+// Geriye uyumluluk için tekil günlük namaz vakitleri getirme
+export const fetchPrayerTimes = async (city: string): Promise<PrayerTimeData[] | null> => {
+  try {
+    // Haftalık veriyi kullanarak bugünün verilerini getir
+    const weeklyTimes = await fetchPrayerTimesRange(city, 0, 0);
+    if (weeklyTimes.length > 0) {
+      return weeklyTimes[0].times;
+    }
+    
+    return null;
   } catch (error) {
     console.error('Namaz vakitleri alınamadı:', error);
     return getDefaultPrayerTimes(city);
@@ -395,7 +591,7 @@ export const fetchPrayerTimes = async (city: string): Promise<PrayerTimeData[] |
 };
 
 // Dizi formatındaki namaz vakitlerini PrayerTimeData dizisine dönüştür
-function createPrayerTimesFromArray(timesArray: string[]): PrayerTimeData[] {
+function createPrayerTimesFromArray(timesArray: string[], isToday: boolean = true): PrayerTimeData[] {
   // API'den gelen verileri dönüştürme
   const now = new Date();
   const currentHour = now.getHours();
@@ -414,7 +610,7 @@ function createPrayerTimesFromArray(timesArray: string[]): PrayerTimeData[] {
   // Namaz vakitlerini oluştur (API'den gelen sıra: imsak, güneş, öğle, ikindi, akşam, yatsı)
   const prayerNames = ['İmsak', 'Güneş', 'Öğle', 'İkindi', 'Akşam', 'Yatsı'];
   
-  // Sıradaki namazı belirleme
+  // Sıradaki namazı belirleme (sadece bugün için)
   for (let i = 0; i < Math.min(timesArray.length, prayerNames.length); i++) {
     const time = timesArray[i];
     const name = prayerNames[i];
@@ -431,7 +627,7 @@ function createPrayerTimesFromArray(timesArray: string[]): PrayerTimeData[] {
       continue;
     }
     
-    const isPrayerNext = !nextPrayerFound && 
+    const isPrayerNext = isToday && !nextPrayerFound && 
       (hour > currentHour || (hour === currentHour && minute > currentMinute));
     
     if (isPrayerNext) {
@@ -445,13 +641,77 @@ function createPrayerTimesFromArray(timesArray: string[]): PrayerTimeData[] {
     });
   }
   
-  // Eğer hiçbir namaz "sıradaki" olarak işaretlenmediyse, ilk namazı işaretle (ertesi gün)
-  if (!nextPrayerFound && prayerTimes.length > 0) {
+  // Eğer hiçbir namaz "sıradaki" olarak işaretlenmediyse ve bugünse, ilk namazı işaretle (ertesi gün)
+  if (isToday && !nextPrayerFound && prayerTimes.length > 0) {
     prayerTimes[0].isNext = true;
   }
   
-  console.log('İşlenmiş namaz vakitleri:', prayerTimes);
   return prayerTimes;
+}
+
+// Varsayılan tarih aralığı için namaz vakitlerini getir
+function getDefaultPrayerTimesRange(city: string, daysBack = 7, daysForward = 7): WeeklyPrayerTimes[] {
+  console.log('Varsayılan namaz vakitleri aralığı kullanılıyor...');
+  
+  const allTimes: WeeklyPrayerTimes[] = [];
+  const today = new Date();
+  const todayStr = formatDateString(today);
+  
+  // Geçmiş günler için veri oluştur
+  for (let i = daysBack; i >= 0; i--) {
+    const date = new Date();
+    date.setDate(today.getDate() - i);
+    
+    const dateString = formatDateString(date);
+    const formattedDate = formatDate(date);
+    const dayName = getDayName(date);
+    const isToday = dateString === todayStr;
+    
+    // O gün için varsayılan vakitler
+    const times = getDefaultPrayerTimes(city).map(prayer => ({
+      ...prayer,
+      isNext: isToday ? prayer.isNext : false // Sadece bugün için isNext
+    }));
+    
+    allTimes.push({
+      date: dateString,
+      formattedDate,
+      dayName,
+      times,
+      isToday
+    });
+  }
+  
+  // Gelecek günler için veri oluştur (bugünü tekrar eklememek için 1'den başla)
+  for (let i = 1; i <= daysForward; i++) {
+    const date = new Date();
+    date.setDate(today.getDate() + i);
+    
+    const dateString = formatDateString(date);
+    const formattedDate = formatDate(date);
+    const dayName = getDayName(date);
+    
+    // O gün için varsayılan vakitler
+    const times = getDefaultPrayerTimes(city).map(prayer => ({
+      ...prayer,
+      isNext: false // Gelecek günlerde isNext yok
+    }));
+    
+    allTimes.push({
+      date: dateString,
+      formattedDate,
+      dayName,
+      times,
+      isToday: false
+    });
+  }
+  
+  return allTimes;
+}
+
+// Varsayılan haftalık namaz vakitlerini getir
+function getDefaultWeeklyPrayerTimes(city: string): WeeklyPrayerTimes[] {
+  return getDefaultPrayerTimesRange(city, 0, 6);
 }
 
 // Varsayılan namaz vakitlerini getir

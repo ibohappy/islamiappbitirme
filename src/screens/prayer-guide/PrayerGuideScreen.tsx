@@ -18,7 +18,10 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialCommunityIcons, FontAwesome5, AntDesign } from '@expo/vector-icons';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { IconWithFallback } from '../../components/ui/IconWithFallback';
+import { useNavigation } from '@react-navigation/native';
+// React Navigation 7 ile useFocusEffect özel versiyon
+import { useFocusEffect } from '@react-navigation/native';
 import { 
   getPrayerInfo, 
   PrayerType, 
@@ -100,10 +103,26 @@ const PrayerGuideScreen: React.FC = () => {
   // Streak sayısını yükle
   const loadStreakCount = async () => {
     try {
-      const count = await getStreakCount();
-      setStreakCount(count);
+      // Önce AsyncStorage'dan streak sayısını kontrol et
+      const storedStreakStr = await AsyncStorage.getItem('streak_count');
+      
+      if (storedStreakStr) {
+        const storedStreak = parseInt(storedStreakStr, 10);
+        setStreakCount(storedStreak);
+        console.log('loadStreakCount - AsyncStorage\'dan yüklendi:', storedStreak);
+      } else {
+        // AsyncStorage'da yoksa servisten al
+        const count = await getStreakCount();
+        setStreakCount(count);
+        
+        // Streak sayısını AsyncStorage'a kaydet
+        await AsyncStorage.setItem('streak_count', count.toString());
+        console.log('loadStreakCount - Servisten yüklendi ve kaydedildi:', count);
+      }
     } catch (error) {
-      console.error('Streak sayısı yüklenirken hata oluştu:', error);
+      console.error('loadStreakCount - Streak sayısı yüklenirken hata oluştu:', error);
+      // Hata durumunda varsayılan değer
+      setStreakCount(0);
     }
   };
 
@@ -125,6 +144,18 @@ const PrayerGuideScreen: React.FC = () => {
   // Zikirmatik verilerini yükle
   const loadZikirData = async () => {
     try {
+      // Son yükleme zamanını kontrol et
+      const lastLoadTime = await AsyncStorage.getItem('last_zikir_load_time');
+      const currentTime = new Date().getTime().toString();
+      
+      // Eğer son yükleme zamanı son 5 saniye içindeyse kontrolü atla
+      if (lastLoadTime && (parseInt(currentTime) - parseInt(lastLoadTime)) < 5000) {
+        return;
+      }
+      
+      // Son yükleme zamanını güncelle
+      await AsyncStorage.setItem('last_zikir_load_time', currentTime);
+      
       // Mevcut zikir türlerini yükle
       const types = await getZikirTypes();
       setZikirTypes(types);
@@ -355,40 +386,37 @@ const PrayerGuideScreen: React.FC = () => {
       // Bugünün tarihini kontrol et
       const today = new Date().toISOString().split('T')[0]; // YYYY-MM-DD formatı
       const lastCompletedDate = await getLastCompletedDate();
-      const lastLoadTime = await AsyncStorage.getItem('last_surah_load_time');
-      const currentTime = new Date().getTime().toString();
-      const lastResetDate = await AsyncStorage.getItem('last_surah_reset_date');
       
-      // Eğer son yükleme zamanı son 10 saniye içindeyse kontrolü atla
-      if (lastLoadTime && (parseInt(currentTime) - parseInt(lastLoadTime)) < 10000) {
-        return;
-      }
+      console.log('loadCompletedSurahs - Bugün:', today);
+      console.log('loadCompletedSurahs - Son tamamlanma tarihi:', lastCompletedDate);
       
-      // Son yükleme zamanını güncelle
-      await AsyncStorage.setItem('last_surah_load_time', currentTime);
+      // AsyncStorage'dan bugünün sure sayısını yükle
+      const completedSurahsStr = await AsyncStorage.getItem('completed_surahs_count');
+      const completedSurahsDate = await AsyncStorage.getItem('completed_surahs_date');
       
-      // Eğer bugün için sure sayısı zaten kaydedilmişse, onu getir
-      if (lastCompletedDate === today) {
-        const completedSurahsStr = await AsyncStorage.getItem('completed_surahs_count');
-        const completedCount = completedSurahsStr ? parseInt(completedSurahsStr, 10) : 0;
+      console.log('loadCompletedSurahs - Tamamlanan sureler:', completedSurahsStr);
+      console.log('loadCompletedSurahs - Tamamlanan sureler tarihi:', completedSurahsDate);
+      
+      // Eğer bugün için sure sayısı varsa kullan
+      if (completedSurahsDate === today && completedSurahsStr) {
+        const completedCount = parseInt(completedSurahsStr, 10);
         setCompletedSurahs(completedCount);
+        console.log('loadCompletedSurahs - Bugünün sure sayısı yüklendi:', completedCount);
+        
+        // Sure tamamlama durumunu güncelle (5 sure tamamlandıysa)
+        if (completedCount >= 5) {
+          await updateDailySurahCompletion(true);
+        }
       } else {
-        // Eğer bugün için sure sayısı henüz sıfırlanmamışsa sıfırla
-        if (lastResetDate !== today) {
+        // Eğer bugün için sure sayısı yoksa sıfırla
         setCompletedSurahs(0);
         await AsyncStorage.setItem('completed_surahs_count', '0');
-          await AsyncStorage.setItem('last_surah_reset_date', today);
-        console.log('PrayerGuideScreen - Yeni gün, sure sayısı sıfırlandı');
-        } else {
-          // Bugün zaten sıfırlama yapılmış, mevcut değeri getir
-          const completedSurahsStr = await AsyncStorage.getItem('completed_surahs_count');
-          const completedCount = completedSurahsStr ? parseInt(completedSurahsStr, 10) : 0;
-          setCompletedSurahs(completedCount);
-          console.log('PrayerGuideScreen - Bugün zaten sure sayısı sıfırlanmış');
-        }
+        await AsyncStorage.setItem('completed_surahs_date', today);
+        await updateDailySurahCompletion(false);
+        console.log('loadCompletedSurahs - Yeni gün, sure sayısı sıfırlandı');
       }
     } catch (error) {
-      console.error('Sure sayısı yüklenirken hata oluştu:', error);
+      console.error('loadCompletedSurahs - Sure sayısı yüklenirken hata oluştu:', error);
       setCompletedSurahs(0);
     }
   };
@@ -397,7 +425,38 @@ const PrayerGuideScreen: React.FC = () => {
   const loadPrayerTracking = async () => {
     try {
       setLoading(true);
-      const tracking = await getDailyPrayerTracking();
+      
+      // Bugünün tarihini al
+      const today = new Date().toISOString().split('T')[0];
+      
+      // AsyncStorage'dan namaz takibini doğrudan oku
+      const storedTrackingDate = await AsyncStorage.getItem('prayer_tracking_date');
+      let tracking = [];
+      
+      console.log('loadPrayerTracking - Bugün:', today);
+      console.log('loadPrayerTracking - Kayıtlı tarih:', storedTrackingDate);
+      
+      if (storedTrackingDate === today) {
+        // Bugüne ait kayıtlı veri varsa onu kullan
+        const storedTrackingData = await AsyncStorage.getItem('prayer_tracking');
+        if (storedTrackingData) {
+          tracking = JSON.parse(storedTrackingData);
+          console.log('loadPrayerTracking - Kayıtlı namaz verileri kullanılıyor:', tracking);
+        }
+      } 
+      
+      // Eğer bugüne ait veri yoksa veya hiç veri yoksa, servis üzerinden getir
+      if (!tracking || tracking.length === 0) {
+        tracking = await getDailyPrayerTracking();
+        
+        // Getirilen verileri AsyncStorage'a kaydet
+        await AsyncStorage.setItem('prayer_tracking', JSON.stringify(tracking));
+        await AsyncStorage.setItem('prayer_tracking_date', today);
+        
+        console.log('loadPrayerTracking - Yeni namaz verileri kaydedildi:', tracking);
+      }
+      
+      // State'i güncelle
       setPrayerTracking(tracking);
       
       // Tamamlanan namaz sayısını güncelle
@@ -416,13 +475,13 @@ const PrayerGuideScreen: React.FC = () => {
       // Streak sayısını güncelle
       setStreakCount(currentStreak);
       
-      console.log('Namaz takibi yüklendi:', tracking);
-      console.log('Tamamlanan namaz sayısı:', completedCount);
-      console.log('Streak sayısı:', currentStreak);
+      console.log('loadPrayerTracking - Namaz takibi yüklendi:', tracking);
+      console.log('loadPrayerTracking - Tamamlanan namaz sayısı:', completedCount);
+      console.log('loadPrayerTracking - Streak sayısı:', currentStreak);
       
       return tracking;
     } catch (error) {
-      console.error('Namaz takibi yüklenirken hata oluştu:', error);
+      console.error('loadPrayerTracking - Namaz takibi yüklenirken hata oluştu:', error);
       Alert.alert('Hata', 'Namaz takibi yüklenirken bir hata oluştu.');
       return [];
     } finally {
@@ -448,6 +507,12 @@ const PrayerGuideScreen: React.FC = () => {
       // Güncel namaz takibini yükle
       const updatedTracking = await getDailyPrayerTracking();
       setPrayerTracking(updatedTracking);
+      
+      // AsyncStorage'a güncel namaz durumunu kaydet
+      const today = new Date().toISOString().split('T')[0];
+      await AsyncStorage.setItem('prayer_tracking', JSON.stringify(updatedTracking));
+      await AsyncStorage.setItem('prayer_tracking_date', today);
+      console.log('handlePrayerStatusUpdate - Güncel namaz durumu kaydedildi:', updatedTracking);
       
       // Tamamlanan namaz sayısını güncelle
       const completedCount = updatedTracking.filter(p => p.completed).length;
@@ -491,7 +556,7 @@ const PrayerGuideScreen: React.FC = () => {
         );
       }
     } catch (error) {
-      console.error('Namaz durumu güncellenirken hata oluştu:', error);
+      console.error('handlePrayerStatusUpdate - Namaz durumu güncellenirken hata oluştu:', error);
       Alert.alert('Hata', 'Namaz durumu güncellenirken bir sorun oluştu.');
     }
   };
@@ -500,9 +565,6 @@ const PrayerGuideScreen: React.FC = () => {
   useFocusEffect(
     useCallback(() => {
       console.log('PrayerGuideScreen - Ekran odaklandı');
-      
-      // Günlük tamamlama durumlarını sıfırla
-      // resetDailyCompletions();
       
       // Namaz takibini ve streak sayısını yükle
       const loadData = async () => {
@@ -532,6 +594,10 @@ const PrayerGuideScreen: React.FC = () => {
           await loadCompletedSurahs();
           console.log('PrayerGuideScreen - Sure sayısı yüklendi:', completedSurahs);
           
+          // Streak sayısını yükle
+          await loadStreakCount();
+          console.log('PrayerGuideScreen - Streak sayısı yüklendi:', streakCount);
+          
           // Zikir türlerini yükle
           await loadZikirTypes();
           console.log('PrayerGuideScreen - Zikir türleri yüklendi');
@@ -552,28 +618,39 @@ const PrayerGuideScreen: React.FC = () => {
       
       loadData();
       
-      // Her 30 saniyede bir sure sayısını ve zikir verilerini güncelle
+      // Her 60 saniyede bir sure sayısını ve zikir verilerini güncelle (30 saniye yerine 60 saniye)
       const interval = setInterval(() => {
         loadCompletedSurahs();
         loadZikirData();
-      }, 30000); // 30 saniye
+      }, 60000); // 60 saniye
       
       return () => {
         clearInterval(interval);
         console.log('PrayerGuideScreen - Ekrandan ayrıldı');
       };
-    }, [])
+    }, []) // Boş dependency array ile sadece ekran odağı değiştiğinde çalışacak
   );
 
   // Streak güncellendiğinde bildirim göster
   useEffect(() => {
     if (streakUpdated) {
-      Alert.alert(
-        'Tebrikler!',
-        `Streak'iniz ${streakCount} güne yükseldi! Her gün düzenli olarak ibadetlerinizi yapmaya devam edin.`,
-        [{ text: 'Teşekkürler', style: 'default' }]
-      );
-      setStreakUpdated(false);
+      // Önce AsyncStorage'a kaydet
+      AsyncStorage.setItem('streak_count', streakCount.toString())
+        .then(() => {
+          console.log('useEffect(streakUpdated) - Streak sayısı AsyncStorage\'a kaydedildi:', streakCount);
+          
+          // Sonra bildirim göster
+          Alert.alert(
+            'Tebrikler!',
+            `Streak'iniz ${streakCount} güne yükseldi! Her gün düzenli olarak ibadetlerinizi yapmaya devam edin.`,
+            [{ text: 'Teşekkürler', style: 'default' }]
+          );
+          setStreakUpdated(false);
+        })
+        .catch(error => {
+          console.error('useEffect(streakUpdated) - Streak kaydedilirken hata:', error);
+          setStreakUpdated(false);
+        });
     }
   }, [streakUpdated, streakCount]);
 
@@ -627,7 +704,7 @@ const PrayerGuideScreen: React.FC = () => {
     <View style={styles.streakIndicatorContainer}>
       <View style={styles.streakIndicatorContent}>
         <View style={styles.streakIndicatorIcon}>
-          <FontAwesome5 name="fire" size={24} color="#FF9800" />
+          <IconWithFallback type="FontAwesome5" name="fire" size={24} color="#FF9800" />
       </View>
         <View style={styles.streakIndicatorTextContainer}>
           <Text style={styles.streakIndicatorTitle}>{streakCount} Günlük Streak</Text>
@@ -662,7 +739,7 @@ const PrayerGuideScreen: React.FC = () => {
             <View style={styles.itemContainer}>
               <View style={styles.infoCard}>
                 <View style={styles.iconCircle}>
-                  <FontAwesome5 name="hands-wash" size={24} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="hands-wash" size={24} color="#4CAF50" />
                 </View>
                 <Text style={styles.cardTitle}>1. Abdest Almak</Text>
                 <Text style={styles.cardDescription}>
@@ -673,7 +750,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoCard}>
                 <View style={styles.iconCircle}>
-                  <FontAwesome5 name="tshirt" size={24} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="tshirt" size={24} color="#4CAF50" />
                 </View>
                 <Text style={styles.cardTitle}>2. Temiz Kıyafet</Text>
                 <Text style={styles.cardDescription}>
@@ -683,7 +760,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoCard}>
                 <View style={styles.iconCircle}>
-                  <FontAwesome5 name="broom" size={24} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="broom" size={24} color="#4CAF50" />
                 </View>
                 <Text style={styles.cardTitle}>3. Temiz Yer</Text>
                 <Text style={styles.cardDescription}>
@@ -693,7 +770,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoCard}>
                 <View style={styles.iconCircle}>
-                  <FontAwesome5 name="compass" size={24} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="compass" size={24} color="#4CAF50" />
                 </View>
                 <Text style={styles.cardTitle}>4. Kıbleye Yönelmek</Text>
                 <Text style={styles.cardDescription}>
@@ -809,7 +886,7 @@ const PrayerGuideScreen: React.FC = () => {
             <View style={styles.infoContainer}>
               <View style={styles.infoItem}>
                 <View style={styles.infoIconContainer}>
-                  <FontAwesome5 name="star" size={20} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="star" size={20} color="#4CAF50" />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoTitle}>Farz Namazlar</Text>
@@ -821,7 +898,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoItem}>
                 <View style={styles.infoIconContainer}>
-                  <FontAwesome5 name="star-half-alt" size={20} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="star-half-alt" size={20} color="#4CAF50" />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoTitle}>Vacip Namazlar</Text>
@@ -833,7 +910,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoItem}>
                 <View style={styles.infoIconContainer}>
-                  <FontAwesome5 name="check" size={20} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="check" size={20} color="#4CAF50" />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoTitle}>Sünnet Namazlar</Text>
@@ -845,7 +922,7 @@ const PrayerGuideScreen: React.FC = () => {
               
               <View style={styles.infoItem}>
                 <View style={styles.infoIconContainer}>
-                  <FontAwesome5 name="heart" size={20} color="#4CAF50" />
+                  <IconWithFallback type="FontAwesome5" name="heart" size={20} color="#4CAF50" />
                 </View>
                 <View style={styles.infoContent}>
                   <Text style={styles.infoTitle}>Nafile Namazlar</Text>
@@ -1071,7 +1148,7 @@ const PrayerGuideScreen: React.FC = () => {
             }}
           >
             <View style={styles.trackingIconContainer}>
-              <FontAwesome5 name="pray" size={24} color="#4CAF50" />
+              <IconWithFallback type="FontAwesome5" name="pray" size={24} color="#4CAF50" />
             </View>
             <View style={styles.trackingTextContainer}>
               <Text style={styles.trackingTitle}>Günlük Namazlar</Text>
@@ -1084,7 +1161,7 @@ const PrayerGuideScreen: React.FC = () => {
           
           <View style={styles.trackingCard}>
             <View style={styles.trackingIconContainer}>
-              <FontAwesome5 name="book" size={24} color="#4CAF50" />
+              <IconWithFallback type="FontAwesome5" name="book" size={24} color="#4CAF50" />
             </View>
             <View style={styles.trackingTextContainer}>
               <Text style={styles.trackingTitle}>Günlük Sureler</Text>
@@ -1153,7 +1230,7 @@ const PrayerGuideScreen: React.FC = () => {
                 </View>
               ) : prayerTracking.length === 0 ? (
                 <View style={styles.emptyContainer}>
-                  <FontAwesome5 name="pray" size={48} color="#E0E0E0" />
+                  <IconWithFallback type="FontAwesome5" name="pray" size={48} color="#E0E0E0" />
                   <Text style={styles.emptyText}>Namaz bilgileri bulunamadı</Text>
                   <TouchableOpacity 
                     style={styles.reloadButton}
@@ -1288,8 +1365,12 @@ const PrayerGuideScreen: React.FC = () => {
       await loadPrayerTracking();
       
       // Streak güncellemesi
-      const newStreakCount = await getStreakCount();
+      const { streakCount: newStreakCount } = await checkAndUpdateStreak();
       setStreakCount(newStreakCount);
+      
+      // AsyncStorage'a kaydet
+      await AsyncStorage.setItem('streak_count', newStreakCount.toString());
+      console.log('handlePrayerCompletion - Streak sayısı güncellendi ve kaydedildi:', newStreakCount);
       
       // Animasyon efekti ekle
       Animated.sequence([
@@ -1305,7 +1386,7 @@ const PrayerGuideScreen: React.FC = () => {
         })
       ]).start();
     } catch (error) {
-      console.error('Namaz kaydedilirken hata oluştu:', error);
+      console.error('handlePrayerCompletion - Namaz kaydedilirken hata oluştu:', error);
       Alert.alert('Hata', 'Namazınız kaydedilirken bir sorun oluştu.');
     }
   }, []);
@@ -1318,23 +1399,27 @@ const PrayerGuideScreen: React.FC = () => {
         return;
       }
       
+      // Bugünün tarihini al
+      const today = new Date().toISOString().split('T')[0];
+      
       // Tamamlanan sure sayısını bir artır
       const newCompletedCount = completedSurahs + 1;
       setCompletedSurahs(newCompletedCount);
       
       // Tamamlanan sure sayısını kaydet
       await AsyncStorage.setItem('completed_surahs_count', newCompletedCount.toString());
-      console.log('PrayerGuideScreen - Tamamlanan sure sayısı güncellendi:', newCompletedCount);
+      await AsyncStorage.setItem('completed_surahs_date', today);
+      console.log('handleSurahCompletion - Tamamlanan sure sayısı güncellendi:', newCompletedCount);
       
       // Eğer tüm sureler tamamlandıysa, sure tamamlama durumunu güncelle
       if (newCompletedCount >= 5) {
         await updateDailySurahCompletion(true);
-        console.log('PrayerGuideScreen - Tüm sureler tamamlandı, durum güncellendi');
+        console.log('handleSurahCompletion - Tüm sureler tamamlandı, durum güncellendi');
         
         // Eğer namazlar da tamamlandıysa streak'i güncelle
         const prayerCompleted = await getDailyPrayerCompletion();
         if (prayerCompleted) {
-          console.log('PrayerGuideScreen - Namazlar da tamamlandı, streak güncelleniyor');
+          console.log('handleSurahCompletion - Namazlar da tamamlandı, streak güncelleniyor');
           const { streakCount: newStreakCount } = await checkAndUpdateStreak();
           setStreakCount(newStreakCount);
         }
@@ -1360,7 +1445,7 @@ const PrayerGuideScreen: React.FC = () => {
         })
       ]).start();
     } catch (error) {
-      console.error('Sure tamamlanırken hata oluştu:', error);
+      console.error('handleSurahCompletion - Sure tamamlanırken hata oluştu:', error);
       Alert.alert('Hata', 'Sureler tamamlanırken bir sorun oluştu.');
     }
   }, [completedSurahs]);
@@ -1420,7 +1505,7 @@ const PrayerGuideScreen: React.FC = () => {
     return (
       <View style={styles.zikirCardContainer}>
         <View style={styles.zikirCardHeader}>
-          <FontAwesome5 name="pray" size={20} color="#4CAF50" solid />
+          <IconWithFallback type="FontAwesome5" name="pray" size={20} color="#4CAF50" />
           <Text style={styles.zikirCardTitle}>Zikir Sayacı</Text>
           <TouchableOpacity onPress={() => setShowCalendarModal(true)}>
             <MaterialCommunityIcons name="calendar-month" size={22} color="#757575" />
@@ -1894,7 +1979,7 @@ const PrayerGuideScreen: React.FC = () => {
 
         <View style={styles.streakBannerContainer}>
           <View style={styles.streakBannerIcon}>
-          <FontAwesome5 name="fire" size={20} color="#FF9800" />
+          <IconWithFallback type="FontAwesome5" name="fire" size={20} color="#FF9800" />
         </View>
           <Text style={styles.streakBannerText}>{streakCount} Günlük Streak</Text>
         <TouchableOpacity 

@@ -4,28 +4,106 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import * as SplashScreen from 'expo-splash-screen';
 import { COLORS } from './src/constants/theme';
+import { loadFontsWithRetry } from './src/utils/FontLoader';
+import * as Font from 'expo-font';
+// Bildirim ve arka plan servisleri için importlar
+import { configureNotifications, requestNotificationPermissions, createNotificationChannel } from './src/services/notificationService';
+import { getUserSettings } from './src/services/storageService';
 
 // Splash screen'in otomatik kapanmasını engelle
 SplashScreen.preventAutoHideAsync();
 
+// Font yükleme fonksiyonu
+const loadFonts = async () => {
+  await Font.loadAsync({
+    'FontAwesome': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome.ttf'),
+    'FontAwesome5_Brands': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome5_Brands.ttf'),
+    'FontAwesome5_Regular': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome5_Regular.ttf'),
+    'FontAwesome5_Solid': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/FontAwesome5_Solid.ttf'),
+    'MaterialCommunityIcons': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/MaterialCommunityIcons.ttf'),
+    'Ionicons': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/Ionicons.ttf'),
+    'AntDesign': require('@expo/vector-icons/build/vendor/react-native-vector-icons/Fonts/AntDesign.ttf')
+  });
+};
+
+// Bildirim servislerini başlat
+const initializeNotifications = async () => {
+  try {
+    console.log('Bildirim servisleri başlatılıyor...');
+    
+    // Bildirim konfigürasyonunu yap
+    configureNotifications();
+    
+    // Android için bildirim kanalı oluştur
+    await createNotificationChannel();
+    
+    // Kullanıcı ayarlarını kontrol et
+    const settings = await getUserSettings();
+    
+    if (settings && settings.notificationsEnabled) {
+      console.log('Kullanıcı bildirimleri etkinleştirmiş, namaz bildirimleri başlatılıyor...');
+      
+      // İzinleri kontrol et ve iste (sadece bildirimler açıksa)
+      const hasPermission = await requestNotificationPermissions();
+      if (!hasPermission) {
+        console.log('Bildirim izni alınamadı');
+        return;
+      }
+      
+      // Namaz bildirimlerini başlat (yeni sistem)
+      try {
+        const { initializePrayerNotifications } = await import('./src/services/backgroundTaskService');
+        console.log('Namaz bildirimleri başlatılıyor...');
+        const success = await initializePrayerNotifications();
+        
+        if (success) {
+          console.log('Namaz bildirimleri başarıyla başlatıldı');
+        } else {
+          console.log('Namaz bildirimleri başlatılamadı (veri bulunamadı)');
+        }
+      } catch (error) {
+        console.error('Namaz bildirimleri başlatılamadı:', error);
+        // Hata durumunda kullanıcıyı bilgilendirebiliriz ama uygulamayı çökertmeyelim
+      }
+    } else {
+      console.log('Kullanıcı bildirimleri devre dışı bırakmış');
+    }
+  } catch (error) {
+    console.error('Bildirim servisleri başlatılırken hata:', error);
+    // Bildirim hatası uygulamayı çökertmemeli
+  }
+};
+
 export default function App() {
   const [appIsReady, setAppIsReady] = useState(false);
   const [showSplash, setShowSplash] = useState(true);
+  const [fontsLoaded, setFontsLoaded] = useState(false);
 
   useEffect(() => {
     async function prepare() {
       try {
-        // Uygulama başlatılırken yapılacak işlemler (örn. font yükleme, API çağrıları vb.)
-        await new Promise(resolve => setTimeout(resolve, 2000)); // Simüle edilmiş yükleme süresi
+        // İkonlar için fontları yükle (manuel yöntemi kullanıyoruz)
+        const fontsLoadedResult = await loadFontsWithRetry(3, 15000);
+        setFontsLoaded(fontsLoadedResult);
+        
+        // Bildirim servislerini başlat
+        await initializeNotifications();
+        
+        // Diğer hazırlık işlemleri
+        await new Promise(resolve => setTimeout(resolve, 1000)); // Kısa bir bekleme
       } catch (e) {
-        console.warn(e);
+        console.warn('Yükleme hatası:', e);
       } finally {
-        // Hazırlık tamamlandı
+        // Fontlar yüklenemese bile devam ediyoruz
         setAppIsReady(true);
       }
     }
 
     prepare();
+  }, []);
+
+  useEffect(() => {
+    loadFonts();
   }, []);
 
   const onLayoutRootView = useCallback(async () => {
@@ -49,7 +127,7 @@ export default function App() {
       {showSplash ? (
         <CustomSplashScreen />
       ) : (
-        <AppNavigator />
+        <AppNavigator fontsLoaded={fontsLoaded} />
       )}
     </SafeAreaProvider>
   );

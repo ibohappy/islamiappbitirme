@@ -11,7 +11,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -19,7 +19,7 @@ import { COLORS, SPACING } from '../../constants/theme';
 import { signInUser } from '../../lib/supabase';
 import NetInfo from '@react-native-community/netinfo';
 import { Ionicons } from '@expo/vector-icons';
-import { AuthContext } from '../../contexts/AuthContext';
+import { AuthContext, useAuth } from '../../contexts/AuthContext';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Login'>;
 
@@ -32,20 +32,42 @@ export function LoginScreen({ navigation }: Props) {
   const [isCheckingConnection, setIsCheckingConnection] = useState(false);
   const [loginAttempts, setLoginAttempts] = useState(0);
   
-  const { setIsAuthenticated } = useContext(AuthContext);
+  // Yeni Auth Context'ten fonksiyonları al
+  const { refreshSession } = useAuth();
 
   // Ağ durumu kontrolü için useEffect
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsConnected(state.isConnected);
-    });
-
-    // İlk kontrol
-    checkNetworkConnection();
+    let netInfoSubscription: any = null;
     
-    // Temizleme işlevi
+    const initializeNetworkListener = () => {
+      try {
+        netInfoSubscription = NetInfo.addEventListener(state => {
+          setIsConnected(state.isConnected);
+        });
+        
+        // İlk kontrol
+        checkNetworkConnection();
+      } catch (error) {
+        console.warn('NetInfo listener başlatılırken hata (görmezden geliniyor):', error);
+      }
+    };
+    
+    initializeNetworkListener();
+    
+    // Güvenli temizleme işlevi
     return () => {
-      unsubscribe();
+      try {
+        if (netInfoSubscription) {
+          if (typeof netInfoSubscription.remove === 'function') {
+            netInfoSubscription.remove();
+          } else if (typeof netInfoSubscription === 'function') {
+            netInfoSubscription();
+          }
+          netInfoSubscription = null;
+        }
+      } catch (error) {
+        console.warn('NetInfo listener temizlenirken hata (görmezden geliniyor):', error);
+      }
     };
   }, []);
 
@@ -91,6 +113,12 @@ export function LoginScreen({ navigation }: Props) {
     try {
       console.log('Giriş başarılı, kimlik durumu değiştiriliyor...');
       
+      // Context7 best practice: Form verilerini temizle
+      setEmail('');
+      setPassword('');
+      setError('');
+      setLoginAttempts(0);
+      
       // Success alert göster
       Alert.alert(
         "Giriş Başarılı",
@@ -99,7 +127,7 @@ export function LoginScreen({ navigation }: Props) {
           text: "Tamam",
           onPress: () => {
             // Alert onaylandıktan sonra kimlik durumunu değiştir
-            setIsAuthenticated(true);
+            refreshSession();
           }
         }]
       );

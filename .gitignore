@@ -76,3 +76,8 @@ yarn-error.*
 *.tsbuildinfo
 
 # @end expo-cli
+
+# Environment variables
+.env
+.env.*
+src/config/env.ts

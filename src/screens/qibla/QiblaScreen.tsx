@@ -17,6 +17,7 @@ import { Magnetometer } from 'expo-sensors';
 import * as Location from 'expo-location';
 import { Ionicons, FontAwesome5 } from '@expo/vector-icons';
 import { COLORS } from '../../constants/theme';
+import { IconWithFallback } from '../../components/ui/IconWithFallback';
 
 // Low-pass filtresi için faktör (0-1 arası, 1'e yaklaştıkça daha az filtreleme yapar)
 const SMOOTHING_FACTOR = 0.2;
@@ -166,7 +167,17 @@ const QiblaScreen: React.FC = () => {
 
   // Aboneliği kaldır
   const _unsubscribe = () => {
-    subscription && subscription.remove();
+    try {
+      if (subscription) {
+        if (typeof subscription.remove === 'function') {
+          subscription.remove();
+        } else if (typeof subscription === 'function') {
+          subscription();
+        }
+      }
+    } catch (error) {
+      console.warn('Magnetometer subscription temizlenirken hata (görmezden geliniyor):', error);
+    }
     setSubscription(null);
   };
 
@@ -317,7 +328,7 @@ const QiblaScreen: React.FC = () => {
           </View>
           
           <View style={styles.qiblaInfoItem}>
-            <FontAwesome5 name="map-marker-alt" size={14} color="#4CAF50" style={styles.locationIcon} />
+            <IconWithFallback type="FontAwesome5" name="map-marker-alt" size={14} color="#4CAF50" style={styles.locationIcon} />
             <Text style={styles.locationText} numberOfLines={1} ellipsizeMode="tail">
               Mekke, Suudi Arabistan
             </Text>
@@ -446,7 +457,7 @@ const QiblaScreen: React.FC = () => {
                 ]}
               >
                 <View style={styles.qiblaKaabaContainer}>
-                  <FontAwesome5 name="kaaba" size={20} color="#000000" />
+                  <IconWithFallback type="FontAwesome5" name="kaaba" size={30} color="#000000" />
                 </View>
               </Animated.View>
             )}
@@ -461,12 +472,12 @@ const QiblaScreen: React.FC = () => {
           
           <View style={styles.actionButtons}>
             <TouchableOpacity style={styles.actionButton} onPress={calibrateCompass}>
-              <Ionicons name="sync" size={24} color="#4CAF50" />
+              <IconWithFallback type="Ionicons" name="sync" size={24} color="#4CAF50" />
               <Text style={styles.actionButtonText}>Kalibre Et</Text>
             </TouchableOpacity>
             
             <TouchableOpacity style={styles.actionButton} onPress={refreshLocation}>
-              <Ionicons name="location" size={24} color="#4CAF50" />
+              <IconWithFallback type="Ionicons" name="location" size={24} color="#4CAF50" />
               <Text style={styles.actionButtonText}>Konumu Yenile</Text>
             </TouchableOpacity>
           </View>
@@ -734,9 +745,9 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   qiblaKaabaContainer: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 54,
+    height: 54,
+    borderRadius: 27,
     backgroundColor: '#FFFFFF',
     alignItems: 'center',
     justifyContent: 'center',

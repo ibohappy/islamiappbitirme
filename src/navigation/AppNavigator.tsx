@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { NavigationContainer, NavigationContainerRef } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { MaterialCommunityIcons } from '@expo/vector-icons';
+import MaterialCommunityIcons from 'react-native-vector-icons/MaterialCommunityIcons';
 import { View, ActivityIndicator, Text, Alert } from 'react-native';
 import { RootStackParamList, MainTabParamList, AuthStackParamList } from './types';
 import { LoginScreen } from '../screens/auth/LoginScreen';
@@ -10,15 +10,18 @@ import { RegisterScreen } from '../screens/auth/RegisterScreen';
 import { HomeScreen } from '../screens/home/HomeScreen';
 import { QiblaScreen } from '../screens/qibla/QiblaScreen';
 import { ImamAIScreen } from '../screens/imam-ai/ImamAIScreen';
+import { ChatListScreen } from '../screens/imam-ai/ChatListScreen';
 import { DailySurahsScreen } from '../screens/quran/DailySurahsScreen';
 import { PrayerGuideScreen } from '../screens/prayer-guide/PrayerGuideScreen';
+import NotificationSettingsScreen from '../screens/NotificationSettingsScreen';
+import { ProfileScreen } from '../screens/profile';
 import { COLORS } from '../constants/theme';
-import { getCurrentSession } from '../lib/supabase';
 import NetInfo from '@react-native-community/netinfo';
-import { AuthContext } from '../contexts/AuthContext';
+import { AuthProvider, useAuth } from '../contexts/AuthContext';
+import { cleanupAppStateListener } from '../lib/supabase';
 
 // Ana navigation referansını export ediyoruz, böylece herhangi bir yerden erişilebilir
-export const navigationRef = React.createRef<NavigationContainerRef<any>>();
+export const navigationRef = React.createRef<NavigationContainerRef>();
 
 // Navigasyon helper fonksiyonu - global olarak erişilebilir
 export function navigate(name: string, params?: any) {
@@ -41,9 +44,15 @@ export function resetRoot(name: string) {
   }
 }
 
-const Stack = createNativeStackNavigator<RootStackParamList>();
-const AuthStack = createNativeStackNavigator<AuthStackParamList>();
-const Tab = createBottomTabNavigator<MainTabParamList>();
+// FontsLoaded context bilgisini saklamak için
+interface AppNavigatorProps {
+  fontsLoaded?: boolean;
+}
+
+const Stack = createNativeStackNavigator();
+const AuthStack = createNativeStackNavigator();
+const Tab = createBottomTabNavigator();
+const ImamAIStack = createNativeStackNavigator();
 
 function AuthNavigator() {
   return (
@@ -58,31 +67,46 @@ function AuthNavigator() {
   );
 }
 
+// İmam AI için stack navigator - animasyonu devre dışı bırakıyoruz
+function ImamAINavigator() {
+  return (
+    <ImamAIStack.Navigator
+      screenOptions={{
+        headerShown: false,
+        animation: 'none', // Animasyonu tamamen kaldır
+      }}
+    >
+      <ImamAIStack.Screen name="ChatListScreen" component={ChatListScreen} />
+      <ImamAIStack.Screen name="ImamAIScreen" component={ImamAIScreen} />
+    </ImamAIStack.Navigator>
+  );
+}
+
 function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={{
         tabBarActiveTintColor: COLORS.primary,
-        tabBarInactiveTintColor: COLORS.textSecondary,
+        tabBarInactiveTintColor: 'gray',
+        tabBarShowLabel: true,
         tabBarStyle: {
-          borderTopWidth: 1,
+          backgroundColor: COLORS.background,
           borderTopColor: COLORS.border,
-          backgroundColor: COLORS.background,
+          height: 60,
+          paddingBottom: 5,
+          paddingTop: 5,
         },
-        headerStyle: {
-          backgroundColor: COLORS.background,
-        },
-        headerTintColor: COLORS.text,
+        headerShown: false,
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
         options={{
-          title: 'Namaz Vakitleri',
+          title: 'Ana Sayfa',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="clock-outline"
+              name="home-outline"
               size={size}
               color={color}
             />
@@ -96,7 +120,7 @@ function MainTabs() {
           title: 'Kıble',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="compass"
+              name="compass-outline"
               size={size}
               color={color}
             />
@@ -110,7 +134,7 @@ function MainTabs() {
           title: 'Günlük Sureler',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="book-open-page-variant"
+              name="book-open-outline"
               size={size}
               color={color}
             />
@@ -124,7 +148,7 @@ function MainTabs() {
           title: 'Namaz Rehberi',
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
-              name="mosque"
+              name="hands-pray"
               size={size}
               color={color}
             />
@@ -133,12 +157,41 @@ function MainTabs() {
       />
       <Tab.Screen
         name="ImamAI"
-        component={ImamAIScreen}
+        component={ImamAINavigator}
         options={{
           title: 'İmam AI',
+          headerShown: false,
           tabBarIcon: ({ color, size }) => (
             <MaterialCommunityIcons
               name="chat-outline"
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Profile"
+        component={ProfileScreen}
+        options={{
+          title: 'Profil',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="account-outline"
+              size={size}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="NotificationSettings"
+        component={NotificationSettingsScreen}
+        options={{
+          title: 'Bildirimler',
+          tabBarIcon: ({ color, size }) => (
+            <MaterialCommunityIcons
+              name="bell-outline"
               size={size}
               color={color}
             />
@@ -149,49 +202,82 @@ function MainTabs() {
   );
 }
 
-export function AppNavigator() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+// Ana Navigator bileşeni - Auth Context'i kullanır
+function MainNavigator({ fontsLoaded = false }: AppNavigatorProps) {
+  const { isAuthenticated, isLoading, initialized } = useAuth();
   const [isConnected, setIsConnected] = useState<boolean | null>(true);
+  const netInfoSubscriptionRef = React.useRef<any>(null);
 
   useEffect(() => {
-    const unsubscribe = NetInfo.addEventListener(state => {
-      setIsConnected(state.isConnected);
-    });
-    
-    NetInfo.fetch().then(state => {
-      setIsConnected(state.isConnected);
-      if (!state.isConnected) {
-        Alert.alert(
-          "İnternet Bağlantısı Yok",
-          "Uygulamayı kullanmak için internet bağlantısı gereklidir. Lütfen bağlantınızı kontrol edin.",
-          [{ text: "Tamam" }]
-        );
+    const initializeNetworkListener = () => {
+      try {
+        const subscription = NetInfo.addEventListener(state => {
+          setIsConnected(state.isConnected);
+        });
+        netInfoSubscriptionRef.current = subscription;
+        
+        NetInfo.fetch().then(state => {
+          setIsConnected(state.isConnected);
+          if (!state.isConnected) {
+            Alert.alert(
+              "İnternet Bağlantısı Yok",
+              "Uygulamayı kullanmak için internet bağlantısı gereklidir. Lütfen bağlantınızı kontrol edin.",
+              [{ text: "Tamam" }]
+            );
+          }
+        });
+      } catch (error) {
+        console.warn('NetInfo listener başlatılamadı:', error);
       }
-    });
+    };
+    
+    initializeNetworkListener();
     
     return () => {
-      unsubscribe();
+      try {
+        if (netInfoSubscriptionRef.current) {
+          if (typeof netInfoSubscriptionRef.current.remove === 'function') {
+            netInfoSubscriptionRef.current.remove();
+          } else if (typeof netInfoSubscriptionRef.current === 'function') {
+            netInfoSubscriptionRef.current();
+          }
+          netInfoSubscriptionRef.current = null;
+        }
+      } catch (error) {
+        console.warn('NetInfo listener temizlenirken hata (görmezden geliniyor):', error);
+      }
     };
   }, []);
 
-  useEffect(() => {
-    const checkSession = async () => {
-      try {
-        console.log('Oturum kontrolü yapılıyor...');
-        setIsAuthenticated(false);
-      } catch (error) {
-        console.error('Oturum kontrolü sırasında hata:', error);
-        setIsAuthenticated(false);
-      } finally {
-        setIsLoading(false);
+  // Auth state değişikliklerini handle et - Context7 best practice
+  const [navigationKey, setNavigationKey] = React.useState('guest');
+  const [prevAuthState, setPrevAuthState] = React.useState<boolean | null>(null);
+  
+  React.useEffect(() => {
+    if (initialized) {
+      // Context7 best practice: Authentication state değişikliğini detect et
+      if (prevAuthState !== null && prevAuthState !== isAuthenticated) {
+        console.log(`🔄 Authentication state değişimi: ${prevAuthState} -> ${isAuthenticated}`);
+        
+        // Navigation state'i tamamen reset et
+        const newKey = isAuthenticated ? `authenticated-${Date.now()}` : `guest-${Date.now()}`;
+        console.log(`🗝️ Navigation key güncelleniyor: ${navigationKey} -> ${newKey}`);
+        setNavigationKey(newKey);
+        
+        // Context7 best practice: Async cleanup
+        setTimeout(() => {
+          if (global.gc) {
+            global.gc();
+          }
+        }, 100);
       }
-    };
-    
-    checkSession();
-  }, [isConnected]);
+      
+      setPrevAuthState(isAuthenticated);
+    }
+  }, [isAuthenticated, initialized, prevAuthState, navigationKey]);
 
-  if (isLoading) {
+  // Auth henüz initialize olmadıysa loading göster
+  if (!initialized || isLoading) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: COLORS.background }}>
         <ActivityIndicator size="large" color={COLORS.primary} />
@@ -201,25 +287,72 @@ export function AppNavigator() {
             İnternet bağlantısı bulunamadı. Lütfen bağlantınızı kontrol edin.
           </Text>
         )}
+        {!fontsLoaded && (
+          <Text style={{ marginTop: 5, color: 'orange', textAlign: 'center', padding: 10 }}>
+            Bazı ikonlar yüklenemedi. Görüntü hataları olabilir.
+          </Text>
+        )}
       </View>
     );
   }
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, setIsAuthenticated, isLoading }}>
-      <NavigationContainer ref={navigationRef}>
-        <Stack.Navigator
-          screenOptions={{
-            headerShown: false,
-          }}
-        >
-          {!isAuthenticated ? (
-            <Stack.Screen name="Auth" component={AuthNavigator} />
-          ) : (
-            <Stack.Screen name="Main" component={MainTabs} />
-          )}
-        </Stack.Navigator>
-      </NavigationContainer>
-    </AuthContext.Provider>
+    <NavigationContainer 
+      ref={navigationRef}
+      key={navigationKey} // Context7 best practice: navigation state'i reset et
+    >
+      <Stack.Navigator
+        screenOptions={{
+          headerShown: false,
+        }}
+      >
+        {!isAuthenticated ? (
+          <Stack.Screen 
+            name="Auth" 
+            component={AuthNavigator} 
+            options={{
+              animationTypeForReplace: 'pop', // Context7 best practice: logout animasyonu
+            }}
+          />
+        ) : (
+          <Stack.Screen 
+            name="Main" 
+            component={MainTabs}
+            options={{
+              animationTypeForReplace: 'push', // Context7 best practice: login animasyonu
+            }}
+          />
+        )}
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+// Ana wrapper component - Context7 best practice ile error handling ve cleanup
+export function AppNavigator({ fontsLoaded = false }: AppNavigatorProps) {
+  const isMountedRef = React.useRef(true);
+  
+  // Component unmount edildiğinde cleanup işlemleri
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    
+    return () => {
+      isMountedRef.current = false;
+      
+      // Context7 best practice: Cleanup all global listeners
+      try {
+        console.log('AppNavigator cleanup başlıyor...');
+        cleanupAppStateListener();
+        console.log('AppNavigator cleanup tamamlandı');
+      } catch (error) {
+        console.warn('AppNavigator cleanup sırasında hata (görmezden geliniyor):', error);
+      }
+    };
+  }, []);
+  
+  return (
+    <AuthProvider>
+      <MainNavigator fontsLoaded={fontsLoaded} />
+    </AuthProvider>
   );
 } 

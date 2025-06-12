@@ -11,7 +11,7 @@ import {
   Modal
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NativeStackScreenProps } from '@react-navigation/native-stack';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { AuthStackParamList } from '../../navigation/types';
 import { Button } from '../../components/ui/Button';
 import { Input } from '../../components/ui/Input';
@@ -21,7 +21,7 @@ import { signUpUser } from '../../lib/supabase';
 import 'react-native-url-polyfill/auto';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
-import { AuthContext } from '../../contexts/AuthContext';
+import { AuthContext, useAuth } from '../../contexts/AuthContext';
 import { MaterialIcons } from '@expo/vector-icons';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'Register'>;
@@ -75,8 +75,8 @@ export function RegisterScreen({ navigation }: Props) {
   const [showGenderPicker, setShowGenderPicker] = useState(false);
   const [showSectPicker, setShowSectPicker] = useState(false);
 
-  // AuthContext'ten setIsAuthenticated fonksiyonunu al
-  const { setIsAuthenticated } = useContext(AuthContext);
+  // Yeni Auth Context'ten fonksiyonları al
+  const { refreshSession } = useAuth();
 
   // Sadece harf girişi için doğrulama fonksiyonu - Türkçe karakterleri destekleyen versiyon
   const onlyLettersRegex = /^[a-zA-ZçÇğĞıİöÖşŞüÜ\s]+$/;
@@ -226,10 +226,18 @@ export function RegisterScreen({ navigation }: Props) {
         [{ 
           text: "Tamam", 
           onPress: () => {
+            // Form verilerini temizle
+            setName('');
+            setSurname('');
+            setAge('');
+            setEmail('');
+            setPassword('');
+            setConfirmPassword('');
+            setError('');
+            setEmailError('');
+            
             // Auth Context kullanarak kimlik durumunu değiştir
-            // Bu, AppNavigator'da isAuthenticated değerini değiştirecek ve 
-            // otomatik olarak Main ekranına yönlendirecek
-            setIsAuthenticated(true);
+            refreshSession();
           }
         }]
       );
