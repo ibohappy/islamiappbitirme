@@ -221,7 +221,7 @@ Expo CLI
 
 ### **1. Projeyi Klonlayın**
 ```bash
-git clone https://github.com/yourusername/islami-app.git
+git clone https://github.com/ibohappy/islamiappbitirme
 cd islami-app
 ```
 
@@ -354,7 +354,7 @@ Bu bitirme projesi ile hedeflenen:
 Bu proje **akademik amaçlarla** geliştirilmiş bir bitirme projesidir. Kodu incelemek, öğrenmek ve geliştirmek için kullanabilirsiniz. Ticari kullanım için izin gereklidir.
 
 **Akademik Referans:**
-- Proje Adı: İslami App - Kapsamlı İslami Yaşam Asistanı
+- Proje Adı: DİJİTAL MANEVİYAT: NAMAZ VAKİTLERİ, KIBLE YÖNÜ VE AI TABANLI DİNÎ REHBERLİK SUNAN BİR MOBİL UYGULAMA
 - Geliştirici: [İbrahim MUTLU]
 - Üniversite: [Bilecik Şeyh Edebali Üniversitesi]
 - Bölüm: Bilgisayar Mühendisliği
@@ -372,8 +372,5 @@ Bu uygulama, İslami değerleri modern teknoloji ile buluşturma vizyonuyla **te
 - **Açık kaynak topluluğu**'na kaynak ve ilham için
 teşekkür ederim.
 
-**"Ve kim bir mümini canlandırırsa, sanki bütün insanlığı canlandırmış gibidir."** - Maide Suresi, 32. Ayet
-
----
 
 *Bu bitirme projesi ile İslami yaşamı teknolojinin gücüyle destekleme hedefiyle geliştirilmiştir.* 🌙✨ 
