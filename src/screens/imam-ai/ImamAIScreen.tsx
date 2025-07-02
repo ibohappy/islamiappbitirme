@@ -408,14 +408,36 @@ Tekrar görüştüğümüze çok sevindim. `;
       if (activeChatId) {
         // Hata durumunda da güncel profil bilgilerini kullan
         const currentProfile = await getUserProfile().catch(() => profile);
-        const personName = (currentProfile as any)?.name ? ` ${(currentProfile as any).name} kardeşim` : '';
-        const errorMessage = await addMessageToChat(
+        const personName = (currentProfile as any)?.name ? ` ${(currentProfile as any).name} kardeşim` : ' kardeşim';
+        
+        let errorMessage = '';
+        
+        // Hata tipine göre özel mesajlar
+        if (error instanceof Error) {
+          if (error.message.includes('API anahtarı')) {
+            errorMessage = `Üzgünüm${personName}, sistem yapılandırması eksik. Yöneticinize başvurun. 🔧`;
+          } else if (error.message.includes('rate limit')) {
+            errorMessage = `${personName}, çok yoğun istek var. Lütfen 1-2 dakika bekleyin ve tekrar deneyin. ⏳`;
+          } else if (error.message.includes('İnternet') || error.message.includes('Network')) {
+            errorMessage = `${personName}, internet bağlantınızı kontrol edin ve tekrar deneyin. 🌐`;
+          } else if (error.message.includes('zaman aşımı') || error.message.includes('timeout')) {
+            errorMessage = `${personName}, istek çok uzun sürdü. Lütfen tekrar deneyin. ⏱️`;
+          } else if (error.message.includes('JSON') || error.message.includes('parse')) {
+            errorMessage = `${personName}, sistem yanıtı işlenirken sorun oluştu. Lütfen tekrar deneyin. 🔄`;
+          } else {
+            errorMessage = `Üzgünüm${personName}, şu anda teknik bir sorun yaşıyorum. Lütfen birkaç dakika sonra tekrar deneyin. Dualarınızda unutmayın! 🤲`;
+          }
+        } else {
+          errorMessage = `Üzgünüm${personName}, beklenmeyen bir sorun oluştu. Lütfen tekrar deneyin. 🤲`;
+        }
+        
+        const errorMessageObj = await addMessageToChat(
           activeChatId,
-          `Üzgünüm${personName}, şu anda bir teknik sorun yaşıyorum. Lütfen birkaç dakika sonra tekrar deneyin. Bu arada dualarınızda beni unutmayın! 🤲`,
+          errorMessage,
           false
         );
         
-        setMessages(prev => [...prev, errorMessage]);
+        setMessages(prev => [...prev, errorMessageObj]);
         
         // Hata mesajı için de scroll et
         setTimeout(() => {
@@ -536,6 +558,44 @@ Tekrar görüştüğümüze çok sevindim. `;
       console.log('✅ Hızlı soru yanıtlandı, hafıza güncellendi!');
     } catch (error) {
       console.error('Hızlı soru hatası:', error);
+      
+      // Hızlı soru hata durumunda da detaylı mesaj
+      if (activeChatId) {
+        const currentProfile = await getUserProfile().catch(() => profile);
+        const personName = (currentProfile as any)?.name ? ` ${(currentProfile as any).name} kardeşim` : ' kardeşim';
+        
+        let errorMessage = '';
+        
+        if (error instanceof Error) {
+          if (error.message.includes('API anahtarı')) {
+            errorMessage = `Üzgünüm${personName}, sistem yapılandırması eksik. 🔧`;
+          } else if (error.message.includes('rate limit')) {
+            errorMessage = `${personName}, çok yoğun istek var. Biraz bekleyin. ⏳`;
+          } else if (error.message.includes('İnternet') || error.message.includes('Network')) {
+            errorMessage = `${personName}, internet bağlantınızı kontrol edin. 🌐`;
+          } else if (error.message.includes('zaman aşımı') || error.message.includes('timeout')) {
+            errorMessage = `${personName}, istek çok uzun sürdü. Tekrar deneyin. ⏱️`;
+          } else if (error.message.includes('JSON') || error.message.includes('parse')) {
+            errorMessage = `${personName}, yanıt işlenirken sorun oluştu. 🔄`;
+          } else {
+            errorMessage = `Üzgünüm${personName}, teknik sorun yaşıyorum. Tekrar deneyin. 🤲`;
+          }
+        } else {
+          errorMessage = `Üzgünüm${personName}, beklenmeyen sorun oluştu. 🤲`;
+        }
+        
+        const errorMessageObj = await addMessageToChat(
+          activeChatId,
+          errorMessage,
+          false
+        );
+        
+        setMessages(prev => [...prev, errorMessageObj]);
+        
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
+      }
     } finally {
       setIsLoading(false);
     }

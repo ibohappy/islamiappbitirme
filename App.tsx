@@ -26,51 +26,85 @@ const loadFonts = async () => {
   });
 };
 
-// Bildirim servislerini başlat
+// Context7 best practice: Süper güvenilir bildirim servisi başlatması
 const initializeNotifications = async () => {
   try {
-    console.log('Bildirim servisleri başlatılıyor...');
+    console.log('🚀 [CONTEXT7] Süper güvenilir bildirim servisleri başlatılıyor...');
     
-    // Bildirim konfigürasyonunu yap
+    // Step 1: Temel bildirim sistemi kurulumu
+    console.log('🔧 1. Temel sistem kurulumu...');
     configureNotifications();
-    
-    // Android için bildirim kanalı oluştur
     await createNotificationChannel();
     
-    // Kullanıcı ayarlarını kontrol et
+    // Step 2: Kullanıcı ayarlarını kontrol et
+    console.log('📋 2. Kullanıcı ayarları kontrol ediliyor...');
     const settings = await getUserSettings();
     
-    if (settings && settings.notificationsEnabled) {
-      console.log('Kullanıcı bildirimleri etkinleştirmiş, namaz bildirimleri başlatılıyor...');
-      
-      // İzinleri kontrol et ve iste (sadece bildirimler açıksa)
-      const hasPermission = await requestNotificationPermissions();
-      if (!hasPermission) {
-        console.log('Bildirim izni alınamadı');
-        return;
-      }
-      
-      // Namaz bildirimlerini başlat (yeni sistem)
+    if (!settings) {
+      console.log('⚠️ Kullanıcı ayarları henüz yok, bildirimler devre dışı');
+      return;
+    }
+    
+    if (!settings.notificationsEnabled) {
+      console.log('ℹ️ Kullanıcı bildirimleri devre dışı bırakmış');
+      return;
+    }
+    
+    console.log('✅ Kullanıcı bildirimleri etkin, sistem başlatılıyor...');
+    
+    // Step 3: İzin kontrolü
+    console.log('🔐 3. Bildirim izinleri kontrol ediliyor...');
+    const hasPermission = await requestNotificationPermissions();
+    if (!hasPermission) {
+      console.warn('⚠️ Bildirim izni alınamadı');
+      return;
+    }
+    
+    // Step 4: Context7 - Delayed initialization for stability
+    console.log('⏱️ 4. Sistem stabilizasyonu için 2 saniye bekleniyor...');
+    setTimeout(async () => {
       try {
+        console.log('🚀 5. Namaz bildirim sistemi başlatılıyor...');
+        
         const { initializePrayerNotifications } = await import('./src/services/backgroundTaskService');
-        console.log('Namaz bildirimleri başlatılıyor...');
         const success = await initializePrayerNotifications();
         
         if (success) {
-          console.log('Namaz bildirimleri başarıyla başlatıldı');
+          console.log('✅ [CONTEXT7] Namaz bildirim sistemi başarıyla başlatıldı');
+          
+          // Context7: Verification after 5 seconds
+          setTimeout(async () => {
+            try {
+              const { getNotificationStatus } = await import('./src/services/notificationService');
+              const status = await getNotificationStatus();
+              console.log('📊 [CONTEXT7] Sistem doğrulaması:', {
+                prayer: status.prayerNotifications,
+                total: status.total,
+                upcoming24h: status.upcomingIn24Hours
+              });
+              
+              if (status.prayerNotifications > 0) {
+                console.log(`🎯 [CONTEXT7] Sistem %100 aktif: ${status.prayerNotifications} namaz bildirimi`);
+              } else {
+                console.warn('⚠️ [CONTEXT7] Bildirimler zamanlandı ama tespit edilemiyor');
+              }
+            } catch (verifyError) {
+              console.error('⚠️ [CONTEXT7] Doğrulama hatası:', verifyError.message);
+            }
+          }, 5000);
+          
         } else {
-          console.log('Namaz bildirimleri başlatılamadı (veri bulunamadı)');
+          console.warn('⚠️ Namaz bildirimleri başlatılamadı (veri eksikliği)');
         }
       } catch (error) {
-        console.error('Namaz bildirimleri başlatılamadı:', error);
-        // Hata durumunda kullanıcıyı bilgilendirebiliriz ama uygulamayı çökertmeyelim
+        console.error('❌ [CONTEXT7] Namaz bildirimi başlatma hatası:', error.message);
+        // Hata durumunda uygulama çalışmaya devam etmeli
       }
-    } else {
-      console.log('Kullanıcı bildirimleri devre dışı bırakmış');
-    }
+    }, 2000);
+    
   } catch (error) {
-    console.error('Bildirim servisleri başlatılırken hata:', error);
-    // Bildirim hatası uygulamayı çökertmemeli
+    console.error('💥 [CONTEXT7] Bildirim servisi kritik hatası:', error);
+    // Kritik hata bile uygulamayı çökertmemeli
   }
 };
 

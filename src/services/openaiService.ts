@@ -704,67 +704,210 @@ const selectRelevantHistoryFromUnlimitedMemory = (
 };
 
 /**
- * Sorunun dini konu olup olmadığını kontrol eder
+ * Sorunun dini konu olup olmadığını kontrol eder - CONTEXT7 GELİŞTİRİLMİŞ VERSİYON
  */
 const isReligiousQuestion = (question: string): boolean => {
   const religiousKeywords = [
     // Temel dini terimler
     'allah', 'tanrı', 'peygamber', 'muhammed', 'islam', 'müslüman', 'kuran', 'kur\'an', 'ayet', 'sure', 'hadis',
-    // İbadetler
+    'rasul', 'rasulullah', 'efendimiz', 'nebi', 'resulullah', 'resulü',
+    
+    // İbadetler ve ritüeller
     'namaz', 'oruç', 'ramazan', 'hac', 'umre', 'zekat', 'sadaka', 'dua', 'zikir', 'tesbih', 'istiğfar',
-    // Namaz terimleri
-    'abdest', 'gusül', 'kıble', 'ezan', 'imama', 'cemaat', 'vitir', 'teravih', 'fecir', 'öğle', 'ikindi', 'akşam', 'yatsı',
+    'salavat', 'salat', 'siyam', 'sawm', 'hajj', 'zakah', 'du\'a', 'dhikr', 'tasbih', 'istighfar',
+    
+    // Namaz terimleri ve detayları
+    'abdest', 'gusül', 'kıble', 'ezan', 'imam', 'cemaat', 'vitir', 'teravih', 'fecir', 'öğle', 'ikindi', 'akşam', 'yatsı',
+    'wudu', 'ghusl', 'qibla', 'adhan', 'jama\'ah', 'witr', 'tarawih', 'fajr', 'zuhr', 'asr', 'maghrib', 'isha',
+    'rekat', 'secdegah', 'seccade', 'mihrap', 'minber', 'müezzin', 'kamet', 'tekbir', 'fatiha', 'ruku', 'secde',
+    
+    // Oruç ile ilgili terimler - Context7 Extended
+    'iftar', 'sahur', 'suhur', 'fidye', 'keffaret', 'kaza', 'orucu bozan', 'oruç bozan', 'oruca engel',
+    'oruçlu', 'tutmak', 'açmak', 'bozar', 'bozucu', 'invalidate', 'break fast', 'fasting rules',
+    
     // Fıkhi terimler
-    'helal', 'haram', 'mekruh', 'müstehab', 'farz', 'vacip', 'sünnet', 'bid\'at',
+    'helal', 'haram', 'mekruh', 'müstehab', 'farz', 'vacip', 'sünnet', 'bid\'at', 'caiz', 'günah',
+    'halal', 'haram', 'makruh', 'mustahab', 'fard', 'wajib', 'sunnah', 'bid\'ah', 'ja\'iz', 'sin',
+    
     // Mezhep ve mezhepler
-    'mezhep', 'hanefi', 'şafi', 'şafii', 'maliki', 'hanbeli', 'caferî', 'zeydî',
-    // Dini kavramlar
+    'mezhep', 'hanefi', 'şafi', 'şafii', 'maliki', 'hanbeli', 'caferî', 'zeydî', 'ehli sünnet', 'şia',
+    'madhab', 'hanafi', 'shafi', 'maliki', 'hanbali', 'jafari', 'zaydi', 'ahl as-sunnah', 'shia',
+    
+    // Dini kavramlar ve itikad
     'iman', 'islam', 'ihsan', 'tevhid', 'şirk', 'küfür', 'nifak', 'tövbe', 'istiğfar', 'hamd', 'şükür',
+    'iman', 'islam', 'ihsan', 'tawhid', 'shirk', 'kufr', 'nifaq', 'tawba', 'istighfar', 'hamd', 'shukr',
+    'kelime-i şehadet', 'şehadet', 'la ilahe illallah', 'eşhedü', 'euzübillah', 'istiane', 'tevekkül',
+    
     // Ahlak ve davranış
-    'ahlak', 'edep', 'saygı', 'hoşgörü', 'sabır', 'tevekkül', 'rıza', 'kanaatkarlık',
+    'ahlak', 'edep', 'saygı', 'hoşgörü', 'sabır', 'tevekkül', 'rıza', 'kanaatkarlık', 'adalet', 'merhamet',
+    'akhlaq', 'adab', 'respect', 'patience', 'tawakkul', 'rida', 'contentment', 'justice', 'mercy',
+    
     // Özel günler ve zamanlar
-    'cuma', 'bayram', 'kandil', 'regaib', 'miraç', 'berat', 'kadir gecesi',
-    // Aile ve sosyal hayat
-    'nikah', 'evlilik', 'talak', 'boşanma', 'miras', 'vasiyet', 'akika', 'adak',
-    // Yemek ve içecek
-    'yemek', 'içecek', 'alkol', 'domuz', 'kesim', 'kurban', 'et',
-    // Para ve ticaret
-    'faiz', 'riba', 'ticaret', 'kazanç', 'çalışma', 'emek',
-    // Ölüm ve ahiret
-    'ölüm', 'kabir', 'ahiret', 'cennet', 'cehennem', 'kıyamet', 'hesap',
-    // Sosyal ilişkiler
-    'anne', 'baba', 'aile', 'çocuk', 'komşu', 'arkadaş', 'kardeş' + ' (dini)',
-    // Genel sorular
-    'dini', 'İslami', 'islamda', 'islamın', 'müslümanda', 'dinde', 'peygamberimiz',
-    // Kitaplar
-    'tefsir', 'meal', 'siyer', 'hadis kitabı', 'fıkıh',
+    'cuma', 'bayram', 'kandil', 'regaib', 'miraç', 'berat', 'kadir gecesi', 'laylat al-qadr',
+    'jumu\'ah', 'eid', 'festival', 'rajab', 'isra', 'laylat al-bara\'at', 'ramadan', 'dhul hijjah',
+    
+    // Aile ve sosyal hayat İslami perspektif
+    'nikah', 'evlilik', 'talak', 'boşanma', 'miras', 'vasiyet', 'akika', 'adak', 'nezir',
+    'marriage', 'divorce', 'inheritance', 'will', 'aqiqah', 'vow', 'nadhr',
+    
+    // Yemek ve içecek - İslami hükümler
+    'yemek', 'içecek', 'alkol', 'domuz', 'kesim', 'kurban', 'et', 'zebh', 'bismillah',
+    'food', 'drink', 'alcohol', 'pork', 'slaughter', 'sacrifice', 'meat', 'halal food',
+    
+    // Para ve ticaret - İslami finans
+    'faiz', 'riba', 'ticaret', 'kazanç', 'çalışma', 'emek', 'murabaha', 'sukuk', 'takaful',
+    'interest', 'usury', 'trade', 'earning', 'work', 'labor', 'islamic finance', 'sharia compliant',
+    
+    // Ahiret ve ölüm
+    'ölüm', 'kabir', 'ahiret', 'cennet', 'cehennem', 'kıyamet', 'hesap', 'sırat', 'mizan', 'haşir',
+    'death', 'grave', 'afterlife', 'paradise', 'hell', 'judgment day', 'sirat', 'balance', 'resurrection',
+    'berzah', 'münker nekir', 'azab', 'nimetler', 'huri', 'gılman', 'kevser', 'vasilah',
+    
+    // CONTEXT7 - Özel eklenen ahiret terimleri
+    'sırat köprüsü', 'sirat köprüsü', 'pul-i sirat', 'köprü', 'geçit', 'ahiret köprüsü',
+    'mahşer', 'kıyamet alametleri', 'deccal', 'mehdi', 'isa', 'yecüc mecüc', 'gog magog',
+    
+    // Sosyal ilişkiler İslami çerçevede
+    'anne', 'baba', 'aile', 'çocuk', 'komşu', 'arkadaş', 'kardeş', 'eş', 'validayn', 'birr',
+    'mother', 'father', 'family', 'child', 'neighbor', 'friend', 'brother', 'spouse', 'parents',
+    
+    // Genel sorular - Context7 extended
+    'dini', 'İslami', 'islamda', 'islamın', 'müslümanda', 'dinde', 'peygamberimiz', 'resulümüz',
+    'şeriatta', 'şeriat', 'şariat', 'sharia', 'islamic', 'muslim', 'religion', 'prophet',
+    
+    // Kitaplar ve kaynaklar
+    'tefsir', 'meal', 'siyer', 'hadis kitabı', 'fıkıh', 'akaid', 'kelam', 'tasavvuf',
+    'tafsir', 'translation', 'biography', 'hadith book', 'fiqh', 'aqidah', 'theology', 'sufism',
+    'buhari', 'müslim', 'tirmizi', 'ebu davud', 'nesai', 'ibn mace', 'malik', 'ahmed ibn hanbel',
+    
     // Mekânlar
-    'mescit', 'cami', 'mihrap', 'minber', 'kabe', 'mekke', 'medine'
+    'mescit', 'cami', 'mihrap', 'minber', 'kabe', 'mekke', 'medine', 'kudüs', 'harem',
+    'mosque', 'masjid', 'mihrab', 'minbar', 'kaaba', 'mecca', 'medina', 'jerusalem', 'haram',
+    
+    // Context7 - Gelişmiş dini terimler
+    'veliler', 'evliya', 'salih', 'abdal', 'kutub', 'gavs', 'keramet', 'mucize', 'burhan',
+    'saints', 'righteous', 'miracle', 'proof', 'divine grace', 'blessing', 'barakah', 'fayda',
+    
+    // Tasavvuf terimleri
+    'tarikat', 'sufizm', 'zikir', 'halvet', 'sohbet', 'irşad', 'mürşid', 'şeyh', 'pir',
+    'sufi', 'remembrance', 'retreat', 'guidance', 'teacher', 'master', 'spiritual guide',
+    
+    // Güncel İslami yaşam
+    'başörtü', 'tesettür', 'kapanmak', 'hijab', 'niqab', 'burka', 'chador', 'örtünme',
+    'modesty', 'covering', 'islamic dress', 'veil', 'headscarf', 'modest clothing'
   ];
 
   const questionLower = question.toLowerCase()
     .replace(/[^a-zçğıöşüû\s]/gi, ' ') // Özel karakterleri temizle
     .split(' ')
-    .filter(word => word.length > 2); // 2 karakterden kısa kelimeleri filtrele
+    .filter(word => word.length > 1); // 1 karakterden kısa kelimeleri filtrele
 
-  // En az bir dini kelime içermeli
+  // En az bir dini kelime içermeli - Context7 geliştirilmiş algılama
   const hasReligiousKeyword = questionLower.some(word => 
-    religiousKeywords.some(keyword => 
-      word.includes(keyword) || keyword.includes(word)
-    )
+    religiousKeywords.some(keyword => {
+      // Exact match veya partial match kontrolü
+      return word.includes(keyword) || keyword.includes(word) || 
+             // Benzer kelimeler için edit distance kontrolü
+             editDistance(word, keyword) <= 1;
+    })
   );
 
-  // Genel dini sorular
+  // Context7 - Gelişmiş dini soru pattern'ları
   const religiousPatterns = [
-    /\b(nasıl\s+dua|dua\s+nasıl|namaz\s+nasıl|oruç\s+nasıl)\b/i,
-    /\b(haram\s+mı|helal\s+mi|caiz\s+mi|günah\s+mı)\b/i,
-    /\b(allahın|peygamberin|kuranın|hadiste|islamda)\b/i,
-    /\b(mezhebim|mezhebin|dini|İslami|müslüman)\b/i
+    // Temel dini sorular
+    /\b(nasıl\s+dua|dua\s+nasıl|namaz\s+nasıl|oruç\s+nasıl|hac\s+nasıl)\b/i,
+    /\b(haram\s+mı|helal\s+mi|caiz\s+mi|günah\s+mı|sevap\s+mı)\b/i,
+    /\b(allahın|peygamberin|kuranın|hadiste|islamda|şeriatta)\b/i,
+    /\b(mezhebim|mezhebin|dini|İslami|müslüman|dinimiz)\b/i,
+    
+    // Context7 - Oruç ve ahiret pattern'ları
+    /\b(orucu?\s+(bozan|bozar|açan|açar|geçersiz)|oruç\s+(bozul|açıl))/i,
+    /\b(sırat\s+(köprü|bridge|path|yol)|sirat\s+köprü)/i,
+    /\b(ahiret\s+(hayat|yaşam|dünya)|öbür\s+dünya|âhiret)/i,
+    /\b(kıyamet\s+(gün|alametler|day)|mahşer\s+gün)/i,
+    /\b(cennet\s+(nasıl|nerede|what)|cehennem\s+(nasıl|nerede))/i,
+    
+    // Gelişmiş fıkhi sorular
+    /\b(abdest\s+(bozan|bozar|geçersiz)|wudu\s+(break|invalid))/i,
+    /\b(namaz\s+(bozan|bozar|geçersiz)|salah\s+(invalid|break))/i,
+    /\b(haram\s+(yemek|içecek|şey)|halal\s+(food|drink))/i,
+    /\b(nikah\s+(şart|geçersiz)|evlilik\s+(İslam|dini))/i,
+    
+    // Context7 - Manevi ve tasavvufi sorular
+    /\b(rüya\s+(tabir|yorumu)|dream\s+interpretation)/i,
+    /\b(dua\s+(kabul|etmiş)|prayer\s+(accepted|answered))/i,
+    /\b(şifa\s+(dua|ayet)|healing\s+(prayer|verse))/i,
+    /\b(nazar\s+(değdi|boncuk)|evil\s+eye)/i,
+    
+    // Özel günler ve zamanlar
+    /\b(ramazan\s+(gelmeden|hazırlık)|ramadan\s+preparation)/i,
+    /\b(bayram\s+(namaz|adabı)|eid\s+(prayer|etiquette))/i,
+    /\b(cuma\s+(namaz|hutbe)|friday\s+(prayer|sermon))/i,
+    /\b(kandil\s+(gece|ibadet)|holy\s+(night|worship))/i
   ];
 
   const hasReligiousPattern = religiousPatterns.some(pattern => pattern.test(question));
 
-  return hasReligiousKeyword || hasReligiousPattern;
+  // Context7 - Soru türü analizi (özellikle ahiret konuları için)
+  const questionWords = ['ne', 'nasıl', 'neden', 'niçin', 'hangi', 'kim', 'nerede', 'ne zaman', 'kaç'];
+  const hasQuestionWord = questionWords.some(qw => questionLower.includes(qw));
+  
+  // Ahiret ve ibadatla ilgili özel durumlar
+  const afterlifeTerms = ['sırat', 'sirat', 'köprü', 'mahşer', 'kıyamet', 'cennet', 'cehennem', 'kabir'];
+  const hasAfterlifeTerm = afterlifeTerms.some(term => questionLower.includes(term));
+  
+  const fastingTerms = ['oruç', 'orucu', 'iftar', 'sahur', 'ramazan', 'bozar', 'bozan', 'açar'];
+  const hasFastingTerm = fastingTerms.some(term => questionLower.includes(term));
+
+  // Final karar - Context7 geliştirilmiş mantık
+  const isReligious = hasReligiousKeyword || hasReligiousPattern || 
+                      (hasQuestionWord && (hasAfterlifeTerm || hasFastingTerm));
+
+  // Debug için log (geliştirme aşamasında)
+  if (!isReligious && (hasAfterlifeTerm || hasFastingTerm)) {
+    console.log('🔍 Context7 Debug: Potansiyel dini soru kaçırıldı?', {
+      question: question.substring(0, 100),
+      hasAfterlifeTerm,
+      hasFastingTerm,
+      hasQuestionWord
+    });
+  }
+
+  return isReligious;
+};
+
+// Context7 - Edit distance helper function for better keyword matching
+const editDistance = (str1: string, str2: string): number => {
+  const matrix = [];
+  const n = str2.length;
+  const m = str1.length;
+
+  if (n === 0) return m;
+  if (m === 0) return n;
+
+  for (let i = 0; i <= n; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= m; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= n; i++) {
+    for (let j = 1; j <= m; j++) {
+      if (str2.charAt(i - 1) === str1.charAt(j - 1)) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1,
+          matrix[i][j - 1] + 1,
+          matrix[i - 1][j] + 1
+        );
+      }
+    }
+  }
+
+  return matrix[n][m];
 };
 
 /**
@@ -795,44 +938,185 @@ const isVeryAdvancedQuestion = (question: string): boolean => {
 };
 
 /**
- * Kullanıcının profil bilgilerini soran soru olup olmadığını kontrol eder
+ * Kullanıcının profil bilgilerini soran soru olup olmadığını kontrol eder - CONTEXT7 ULTRA SPESİFİK
  */
 const isProfileInfoQuestion = (question: string): boolean => {
-  const profileKeywords = [
-    'benim', 'mezhebim', 'mezhep', 'yaşım', 'yaş', 'şehrim', 'şehir', 'cinsiyetim', 'cinsiyet',
-    'bilgilerim', 'bilgi', 'profil', 'kimim', 'hangi', 'nerede', 'kaç yaşında',
-    'hangi mezhep', 'hangi şehir', 'hangi yaş', 'adım ne', 'soyadım ne'
+  const questionLower = question.toLowerCase().trim();
+  
+  // Context7 - Çok spesifik profil komutları - Bu komutlar dışında profil gösterilmesin!
+  const explicitProfileCommands = [
+    // Doğrudan profil istekleri
+    'profil bilgilerim',
+    'profil bilgilerimi göster',
+    'profil bilgilerimx',
+    'profilimi göster', 
+    'profilim',
+    'profile bilgilerim',
+    'profile göster',
+    'my profile',
+    'show profile',
+    'show my profile',
+    'profile information',
+    'profil bilgileri',
+    'profil detayları',
+    'profil özeti',
+    
+    // Komut formatında
+    '/profil',
+    '/profile', 
+    '!profil',
+    '!profile',
+    'profil getir',
+    'profil listele',
+    
+    // Tam eşleşme sorular - çok spesifik
+    'benim profil bilgilerim neler',
+    'profilde ne var',
+    'profilde neler kayıtlı',
+    'kayıtlı profil bilgilerim',
+    'sisteme kaydettiğim bilgiler',
+    'hesapta kayıtlı bilgiler',
+    
+    // Açık profil sorgulama
+    'profil bilgilerimi kontrol et',
+    'profil durumum nasıl',
+    'profilimde hangi bilgiler var'
   ];
-
-  const questionLower = question.toLowerCase();
-  return profileKeywords.some(keyword => questionLower.includes(keyword));
+  
+  // TAM EŞLEŞTİRME - sadece bu ifadeler profil getirecek
+  const isExplicitProfileRequest = explicitProfileCommands.some(command => 
+    questionLower === command || questionLower.includes(command)
+  );
+  
+  // Context7 - EK KONTROL: Sadece profil kelimesi geçse bile yeterli değil
+  // Mutlaka "göster", "nedir", "bilgilerim" gibi açık bir talep olmalı
+  const hasProfileKeyword = questionLower.includes('profil');
+  const hasDisplayRequest = questionLower.includes('göster') || 
+                           questionLower.includes('nedir') ||
+                           questionLower.includes('bilgilerim') ||
+                           questionLower.includes('bilgileri') ||
+                           questionLower.includes('detayları') ||
+                           questionLower.includes('show') ||
+                           questionLower.includes('display') ||
+                           questionLower.includes('information');
+  
+  // Context7 - Çok katı kontrol: Hem profil kelimesi hem açık talep olmalı
+  const isClearProfileRequest = hasProfileKeyword && hasDisplayRequest;
+  
+  // YANLIŞ POZİTİFLERİ ENGELLEYEN NEGATIF KONTROLLER
+  const isNotProfileRequest = [
+    // Genel mezhep soruları profil değil
+    questionLower.includes('hangi mezhep') && !questionLower.includes('benim'),
+    questionLower.includes('mezhep nedir') && !questionLower.includes('benim'),
+    questionLower.includes('yaş kaç') && !questionLower.includes('benim'),
+    
+    // Genel sorular
+    questionLower.includes('nasıl yapılır'),
+    questionLower.includes('nasıl olur'),
+    questionLower.includes('ne demek'),
+    questionLower.includes('nedir') && !questionLower.includes('profil'),
+    
+    // Context7 - Dini sorular hiçbir zaman profil değil
+    questionLower.includes('namaz'),
+    questionLower.includes('oruç'),
+    questionLower.includes('allah'),
+    questionLower.includes('peygamber'),
+    questionLower.includes('kuran'),
+    questionLower.includes('hadis'),
+    
+    // Genel mezhep konuşmaları
+    questionLower.includes('mezhepler arası'),
+    questionLower.includes('hangi mezhep daha'),
+    questionLower.includes('mezhep farkları')
+  ].some(condition => condition);
+  
+  // Final karar - Context7 Ultra Spesifik Mantık
+  const result = (isExplicitProfileRequest || isClearProfileRequest) && !isNotProfileRequest;
+  
+  // Debug log (geliştirme için)
+  if (hasProfileKeyword && !result) {
+    console.log('🔍 Context7 Profil Debug: Profil kelimesi var ama spesifik istek değil', {
+      question: question.substring(0, 50),
+      hasDisplayRequest,
+      isNotProfileRequest,
+      isExplicitProfileRequest
+    });
+  }
+  
+  return result;
 };
 
 /**
- * Spesifik mezhep sorusu mu kontrol eder
+ * Context7 - Spesifik mezhep sorusu kontrol - daha hassas
  */
 const isSpecificSectQuestion = (question: string): boolean => {
-  const sectKeywords = [
-    'mezhebim ne', 'mezhebim nedir', 'hangi mezhep', 'mezhebin ne', 'mezhebin nedir',
-    'hanefi mi', 'şafi mi', 'maliki mi', 'hanbeli mi', 'hangi mezhebi',
-    'mezhebim', 'benim mezhebim'
+  const questionLower = question.toLowerCase().trim();
+  
+  // Context7 - Sadece BENİM mezhebi hakkında sorular
+  const specificSectKeywords = [
+    'benim mezhebim ne',
+    'benim mezhebim nedir', 
+    'mezhebim nedir',
+    'mezhebim ne',
+    'hangi mezhepteyim',
+    'hangi mezhebi takip ediyorum',
+    'mezhebin ne', // Sadece eğer "sen" bağlamında
+    'my sect',
+    'my madhab',
+    'which sect am i'
   ];
 
-  const questionLower = question.toLowerCase().trim();
-  return sectKeywords.some(keyword => questionLower.includes(keyword));
+  // TAM EŞLEŞTİRME veya BENİM ifadesi olmalı
+  const isMySpecificSect = specificSectKeywords.some(keyword => 
+    questionLower.includes(keyword)
+  ) || (questionLower.includes('mezhep') && questionLower.includes('benim'));
+  
+  // Genel mezhep sorularını REDDET
+  const isGeneralSectQuestion = [
+    questionLower.includes('mezhepler arası'),
+    questionLower.includes('hangi mezhep daha'),
+    questionLower.includes('mezhep farkları'),
+    questionLower.includes('mezhepler nedir'),
+    questionLower.includes('kaç mezhep var')
+  ].some(condition => condition);
+  
+  return isMySpecificSect && !isGeneralSectQuestion;
 };
 
 /**
- * Spesifik yaş sorusu mu kontrol eder  
+ * Context7 - Spesifik yaş sorusu kontrol - daha hassas  
  */
 const isSpecificAgeQuestion = (question: string): boolean => {
-  const ageKeywords = [
-    'yaşım kaç', 'yaşım ne', 'kaç yaşında', 'yaşın kaç', 'yaşın ne',
-    'yaşım', 'benim yaşım', 'hangi yaş'
+  const questionLower = question.toLowerCase().trim();
+  
+  // Context7 - Sadece BENİM yaşım hakkında sorular
+  const specificAgeKeywords = [
+    'benim yaşım kaç',
+    'benim yaşım ne', 
+    'yaşım kaç',
+    'yaşım ne',
+    'kaç yaşındayım',
+    'hangi yaştayım',
+    'yaşın kaç', // Sadece eğer "sen" bağlamında
+    'my age',
+    'how old am i'
   ];
 
-  const questionLower = question.toLowerCase().trim();
-  return ageKeywords.some(keyword => questionLower.includes(keyword));
+  // TAM EŞLEŞTİRME veya BENİM ifadesi olmalı
+  const isMySpecificAge = specificAgeKeywords.some(keyword => 
+    questionLower.includes(keyword)
+  ) || (questionLower.includes('yaş') && questionLower.includes('benim'));
+  
+  // Genel yaş sorularını REDDET
+  const isGeneralAgeQuestion = [
+    questionLower.includes('hangi yaşta başlanır'),
+    questionLower.includes('kaç yaşında olmalı'),
+    questionLower.includes('yaş sınırı'),
+    questionLower.includes('yaşlılar için'),
+    questionLower.includes('gençler için')
+  ].some(condition => condition);
+  
+  return isMySpecificAge && !isGeneralAgeQuestion;
 };
 
 /**
@@ -1816,6 +2100,53 @@ const createContextualPrePrompt = (userMessage: string, profile: UserProfile | n
   return prePrompt;
 };
 
+// Retry helper fonksiyonu
+const retryWithBackoff = async <T>(
+  fn: () => Promise<T>,
+  maxRetries: number = 3,
+  baseDelay: number = 1000
+): Promise<T> => {
+  let lastError: Error;
+  
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (error: any) {
+      lastError = error;
+      
+      // Son deneme ise hata fırlat
+      if (attempt === maxRetries) {
+        throw error;
+      }
+      
+      // Retry edilebilir hata mı kontrol et
+      const isRetryable = 
+        error.message.includes('rate limit') ||
+        error.message.includes('Network request failed') ||
+        error.message.includes('Failed to fetch') ||
+        error.message.includes('zaman aşımına uğradı') ||
+        error.message.includes('timeout') ||
+        (error.message.includes('HTTP') && (
+          error.message.includes('500') || 
+          error.message.includes('502') || 
+          error.message.includes('503') || 
+          error.message.includes('504')
+        ));
+      
+      if (!isRetryable) {
+        throw error; // Retry edilemez hata, hemen fırlat
+      }
+      
+      // Exponential backoff ile bekle
+      const delay = baseDelay * Math.pow(2, attempt) + Math.random() * 1000;
+      console.log(`🔄 Deneme ${attempt + 1}/${maxRetries} başarısız, ${Math.round(delay)}ms sonra tekrar denenecek...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+  }
+  
+  throw lastError!;
+};
+
 /**
  * OpenAI API'sine geliştirilmiş hafıza sistemi ve Chain of Thought ile istek gönderen fonksiyon
  */
@@ -1879,8 +2210,17 @@ Seviyenizi seçtikten sonra sorularınızı tekrar sorabilirsiniz. 📚`;
       return response;
     }
     
-    // 6. DİNİ SORU KONTROLÜ
-    if (!isReligiousQuestion(userMessage)) {
+    // 6. DİNİ SORU KONTROLÜ - CONTEXT7 GELİŞTİRİLMİŞ
+    const isReligious = isReligiousQuestion(userMessage);
+    
+    // Context7 Debug Log - hangi sorular dini olarak algılanmıyor
+    console.log('🔍 Context7 Dini Soru Kontrolü:', {
+      question: userMessage.substring(0, 100),
+      isReligious,
+      userId: userId.substring(0, 10)
+    });
+    
+    if (!isReligious) {
       const name = userProfile?.name ? ` ${userProfile.name} kardeşim` : ' kardeşim';
       const response = `Üzgünüm${name}, ben sadece İslami ve dini konularda yardımcı olabilirim. 🕌
 
@@ -1891,6 +2231,8 @@ Bu tür sorularınızda size yardımcı olabilirim:
 • Kur'an ve hadis açıklamaları
 • Dini günler ve kandiller
 • İslami yaşam tarzı tavsiyeleri
+• Ahiret, cennet, cehennem, sırat köprüsü konuları
+• Orucu bozan şeyler, namaz ile ilgili meseleler
 
 Başka bir dini sorunuz var mı? 🤲`;
       
@@ -1898,10 +2240,18 @@ Başka bir dini sorunuz var mı? 🤲`;
       return response;
     }
     
-    // 7. API ANAHTARI KONTROLÜ
+    // 7. API ANAHTARI KONTROLÜ - GELİŞTİRİLMİŞ
     if (!OPENAI_API_KEY || OPENAI_API_KEY === 'your-openai-api-key-here') {
       console.error('OpenAI API anahtarı tanımlanmamış. Lütfen config/env.ts dosyasını güncelleyin.');
       const response = 'Üzgünüm, sistem şu anda yapılandırılmamış. Lütfen yöneticinize başvurun.';
+      saveToUnlimitedMemory(userId, 'assistant', response);
+      return response;
+    }
+    
+    // API anahtarı format kontrolü
+    if (!validateApiKey(OPENAI_API_KEY)) {
+      console.error('OpenAI API anahtarı geçersiz format:', OPENAI_API_KEY.substring(0, 10) + '...');
+      const response = 'Üzgünüm, sistem yapılandırması hatalı. Lütfen yöneticinize başvurun.';
       saveToUnlimitedMemory(userId, 'assistant', response);
       return response;
     }
@@ -1915,32 +2265,125 @@ Başka bir dini sorunuz var mı? 🤲`;
     console.log(`🧠 Chain of Thought: ${userId} için ${messages.length} mesajlık bağlam oluşturuldu`);
     console.log(`📊 Parametreler: temp=${chatParams.temperature}, tokens=${chatParams.maxTokens}`);
     
-    // 10. OPENAI API ÇAĞRISI
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${OPENAI_API_KEY}`
-      },
-      body: JSON.stringify({
-        model: 'gpt-4o',
-        messages: messages,
-        temperature: chatParams.temperature,
-        max_tokens: chatParams.maxTokens,
-        top_p: 0.9,
-        presence_penalty: chatParams.presencePenalty,
-        frequency_penalty: chatParams.frequencyPenalty,
-        stop: null,
-      })
-    });
+    // 10. OPENAI API ÇAĞRISI - GELİŞTİRİLMİŞ HATA YÖNETİMİ VE RETRY İLE
+    let response;
+    let data;
     
-    if (!response.ok) {
-      const errorData = await response.json();
-      console.error('OpenAI API hatası:', errorData);
-      throw new Error(`OpenAI API hatası: ${response.status}`);
+    const fetchWithRetry = async () => {
+      // Network timeout ile fetch
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000); // 30 saniye timeout
+      
+      try {
+        response = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${OPENAI_API_KEY}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o',
+            messages: messages,
+            temperature: chatParams.temperature,
+            max_tokens: chatParams.maxTokens,
+            top_p: 0.9,
+            presence_penalty: chatParams.presencePenalty,
+            frequency_penalty: chatParams.frequencyPenalty,
+            stop: null,
+          }),
+          signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        
+        // Response status kontrolü
+        if (!response.ok) {
+          let errorMessage = `HTTP ${response.status}`;
+          let errorDetails = '';
+          
+          try {
+            // JSON response var mı kontrol et
+            const responseText = await response.text();
+            if (responseText.trim()) {
+              const errorData = JSON.parse(responseText);
+              errorMessage = errorData.error?.message || errorMessage;
+              errorDetails = JSON.stringify(errorData, null, 2);
+            }
+          } catch (parseError) {
+            console.warn('Error response parse edilemedi:', parseError);
+            errorDetails = await response.text();
+          }
+          
+          console.error('OpenAI API hatası:', {
+            status: response.status,
+            message: errorMessage,
+            details: errorDetails
+          });
+          
+          // Spesifik hata mesajları
+          if (response.status === 401) {
+            throw new Error('API anahtarı geçersiz veya eksik');
+          } else if (response.status === 429) {
+            throw new Error('API rate limit aşıldı, lütfen biraz bekleyin');
+          } else if (response.status === 500) {
+            throw new Error('OpenAI sunucu hatası, lütfen tekrar deneyin');
+          } else {
+            throw new Error(`OpenAI API hatası: ${errorMessage}`);
+          }
+        }
+        
+        // Response JSON parse etme - güvenli şekilde
+        const responseText = await response.text();
+        if (!responseText.trim()) {
+          throw new Error('OpenAI API\'den boş yanıt alındı');
+        }
+        
+        try {
+          data = JSON.parse(responseText);
+        } catch (jsonError) {
+          console.error('JSON parse hatası:', {
+            error: jsonError,
+            responseText: responseText.substring(0, 500)
+          });
+          throw new Error('API yanıtı işlenirken hata oluştu');
+        }
+        
+        // Response format kontrolü
+        if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+          console.error('Beklenmeyen API yanıt formatı:', data);
+          throw new Error('API yanıt formatı hatalı');
+        }
+        
+        return data;
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        console.error('Fetch hatası:', fetchError);
+        
+        // Timeout hatası
+        if (fetchError.name === 'AbortError') {
+          throw new Error('İstek zaman aşımına uğradı, lütfen tekrar deneyin');
+        }
+        
+        // Network hatası
+        if (fetchError.message.includes('Failed to fetch') || 
+            fetchError.message.includes('Network request failed') ||
+            fetchError.message.includes('fetch')) {
+          throw new Error('İnternet bağlantısını kontrol edin ve tekrar deneyin');
+        }
+        
+        // Diğer hatalar
+        throw fetchError;
+      }
+    };
+    
+    // Retry ile API çağrısı yap
+    try {
+      data = await retryWithBackoff(fetchWithRetry, 3, 1000);
+    } catch (error) {
+      console.error('Tüm retry denemeleri başarısız:', error);
+      throw error;
     }
     
-    const data = await response.json();
     let aiResponse = data.choices[0].message.content;
     
     // 11. POST-PROCESSING (Bağlamsal iyileştirmeler)
@@ -2116,3 +2559,238 @@ const updateConversationInsights = (
     console.log(`📈 Öğrenme İçgörüsü - ${userId}: ${questionComplexity} seviye soru, ${responseLength} karakter yanıt`);
   }
 }; 
+
+// API anahtarı geçerlilik kontrolü
+const validateApiKey = (apiKey: string): boolean => {
+  // OpenAI API anahtarı formatı kontrolü
+  const apiKeyPattern = /^sk-[a-zA-Z0-9-_]{20,}$/;
+  return apiKeyPattern.test(apiKey);
+};
+
+// API bağlantısını test etme fonksiyonu
+const testApiConnection = async (): Promise<boolean> => {
+  try {
+    if (!OPENAI_API_KEY || !validateApiKey(OPENAI_API_KEY)) {
+      console.error('Geçersiz API anahtarı formatı');
+      return false;
+    }
+
+    const response = await fetch('https://api.openai.com/v1/models', {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${OPENAI_API_KEY}`
+      }
+    });
+
+    return response.ok;
+  } catch (error) {
+    console.error('API bağlantı testi başarısız:', error);
+    return false;
+  }
+};
+
+// Sistem durumu diagnostik fonksiyonu
+export const runDiagnostics = async (): Promise<{
+  apiKeyValid: boolean;
+  connectionWorking: boolean;
+  errors: string[];
+  suggestions: string[];
+}> => {
+  const errors: string[] = [];
+  const suggestions: string[] = [];
+  
+  // API anahtarı kontrolü
+  const apiKeyValid = OPENAI_API_KEY && 
+                      OPENAI_API_KEY !== 'your-openai-api-key-here' && 
+                      validateApiKey(OPENAI_API_KEY);
+  
+  if (!apiKeyValid) {
+    errors.push('API anahtarı geçersiz veya eksik');
+    suggestions.push('config/env.ts dosyasında OPENAI_API_KEY değerini kontrol edin');
+  }
+  
+  // Bağlantı testi
+  let connectionWorking = false;
+  try {
+    connectionWorking = await testApiConnection();
+    if (!connectionWorking) {
+      errors.push('OpenAI API\'ye bağlantı kurulamıyor');
+      suggestions.push('İnternet bağlantınızı ve API anahtarının geçerliliğini kontrol edin');
+    }
+  } catch (error) {
+    errors.push('Bağlantı testi sırasında hata oluştu');
+    suggestions.push('Network bağlantısını kontrol edin');
+  }
+  
+  return {
+    apiKeyValid,
+    connectionWorking,
+    errors,
+    suggestions
+  };
+};
+
+// Hızlı hata teşhis fonksiyonu
+export const quickErrorDiagnosis = async (error: Error): Promise<string> => {
+  const diagnostics = await runDiagnostics();
+  
+  let diagnosis = '🔍 Hata Teşhisi:\n\n';
+  
+  if (!diagnostics.apiKeyValid) {
+    diagnosis += '❌ API anahtarı sorunu tespit edildi\n';
+    diagnosis += '💡 Çözüm: API anahtarınızı kontrol edin\n\n';
+  }
+  
+  if (!diagnostics.connectionWorking) {
+    diagnosis += '❌ Bağlantı sorunu tespit edildi\n';
+    diagnosis += '💡 Çözüm: İnternet bağlantınızı kontrol edin\n\n';
+  }
+  
+  if (error.message.includes('JSON')) {
+    diagnosis += '❌ Veri işleme hatası\n';
+    diagnosis += '💡 Çözüm: API\'den gelen yanıt bozuk olabilir\n\n';
+  }
+  
+  if (error.message.includes('timeout')) {
+    diagnosis += '❌ Zaman aşımı hatası\n';
+    diagnosis += '💡 Çözüm: İnternet hızınızı kontrol edin\n\n';
+  }
+  
+  return diagnosis;
+};
+
+// Context7 - Test sistemi ve gelişmiş diagnostik
+export const testReligiousQuestionDetection = (testQuestions: string[]): {
+  question: string;
+  detected: boolean;
+  shouldBeDetected: boolean;
+  status: 'PASS' | 'FAIL';
+}[] => {
+  const results = [];
+  
+  const testCases = [
+    // Dini sorular - tespit edilmeli
+    { question: 'sırat köprüsü nedir', shouldBeDetected: true },
+    { question: 'orucu bozan şeyler neler', shouldBeDetected: true },
+    { question: 'namaz nasıl kılınır', shouldBeDetected: true },
+    { question: 'ahiret hayatı nasıl', shouldBeDetected: true },
+    { question: 'cennet nerede', shouldBeDetected: true },
+    { question: 'vitir namazı kaç rekat', shouldBeDetected: true },
+    { question: 'abdest nasıl alınır', shouldBeDetected: true },
+    { question: 'ramazan orucu', shouldBeDetected: true },
+    
+    // Dini olmayan sorular - tespit edilmemeli
+    { question: 'hava durumu nasıl', shouldBeDetected: false },
+    { question: 'yemek tarifi ver', shouldBeDetected: false },
+    { question: 'matematik sorusu', shouldBeDetected: false },
+    { question: 'programlama öğren', shouldBeDetected: false },
+    { question: 'spor haberleri', shouldBeDetected: false }
+  ];
+  
+  for (const testCase of testCases) {
+    const detected = isReligiousQuestion(testCase.question);
+    const status = detected === testCase.shouldBeDetected ? 'PASS' : 'FAIL';
+    
+    results.push({
+      question: testCase.question,
+      detected,
+      shouldBeDetected: testCase.shouldBeDetected,
+      status
+    });
+  }
+  
+  return results;
+};
+
+// Context7 - Profil kontrolü test sistemi
+export const testProfileQuestionDetection = (): {
+  question: string;
+  detected: boolean;
+  shouldBeDetected: boolean;
+  status: 'PASS' | 'FAIL';
+}[] => {
+  const results = [];
+  
+  const testCases = [
+    // Profil sorular - tespit edilmeli
+    { question: 'profil bilgilerim', shouldBeDetected: true },
+    { question: 'profilimi göster', shouldBeDetected: true },
+    { question: '/profil', shouldBeDetected: true },
+    { question: 'benim profil bilgilerim neler', shouldBeDetected: true },
+    
+    // Profil olmayan sorular - tespit edilmemeli  
+    { question: 'hangi mezhep daha iyi', shouldBeDetected: false },
+    { question: 'namaz kaç rekat', shouldBeDetected: false },
+    { question: 'oruç nasıl tutulur', shouldBeDetected: false },
+    { question: 'mezhep nedir', shouldBeDetected: false },
+    { question: 'yaş kaç olmalı', shouldBeDetected: false }
+  ];
+  
+  for (const testCase of testCases) {
+    const detected = isProfileInfoQuestion(testCase.question);
+    const status = detected === testCase.shouldBeDetected ? 'PASS' : 'FAIL';
+    
+    results.push({
+      question: testCase.question,
+      detected,
+      shouldBeDetected: testCase.shouldBeDetected,
+      status
+    });
+  }
+  
+  return results;
+};
+
+// Context7 - Kapsamlı sistem teşhisi
+export const runComprehensiveDiagnostics = async (): Promise<{
+  religiousQuestionTests: any[];
+  profileQuestionTests: any[];
+  apiDiagnostics: any;
+  systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL';
+  recommendations: string[];
+}> => {
+  console.log('🔍 Context7 Comprehensive Diagnostics başlatılıyor...');
+  
+  // Test sistemleri
+  const religiousTests = testReligiousQuestionDetection([]);
+  const profileTests = testProfileQuestionDetection();
+  const apiDiag = await runDiagnostics();
+  
+  // Başarı oranları
+  const religiousPassRate = religiousTests.filter(t => t.status === 'PASS').length / religiousTests.length;
+  const profilePassRate = profileTests.filter(t => t.status === 'PASS').length / profileTests.length;
+  
+  // Sistem sağlığı değerlendirmesi
+  let systemHealth: 'HEALTHY' | 'WARNING' | 'CRITICAL' = 'HEALTHY';
+  const recommendations: string[] = [];
+  
+  if (!apiDiag.apiKeyValid || !apiDiag.connectionWorking) {
+    systemHealth = 'CRITICAL';
+    recommendations.push('API anahtarı ve bağlantı sorunları acil çözülmeli');
+  } else if (religiousPassRate < 0.8 || profilePassRate < 0.8) {
+    systemHealth = 'WARNING';
+    recommendations.push('Soru tespit algoritmaları optimize edilmeli');
+  }
+  
+  if (religiousPassRate < 0.9) {
+    recommendations.push(`Dini soru tespiti %${(religiousPassRate * 100).toFixed(1)} başarı ile çalışıyor`);
+  }
+  
+  if (profilePassRate < 0.9) {
+    recommendations.push(`Profil soru tespiti %${(profilePassRate * 100).toFixed(1)} başarı ile çalışıyor`);
+  }
+  
+  console.log('✅ Context7 Diagnostics tamamlandı:', {
+    systemHealth,
+    religiousPassRate: `${(religiousPassRate * 100).toFixed(1)}%`,
+    profilePassRate: `${(profilePassRate * 100).toFixed(1)}%`
+  });
+  
+  return {
+    religiousQuestionTests: religiousTests,
+    profileQuestionTests: profileTests,
+    apiDiagnostics: apiDiag,
+    systemHealth,
+    recommendations
+  };
+};

@@ -1,11 +1,19 @@
 import * as Notifications from 'expo-notifications';
 import { getUserSettings, getPrayerTimesData } from './storageService';
-import { createNotificationChannel } from './notificationService';
+import { 
+  createNotificationChannel, 
+  requestNotificationPermissions,
+  configureNotifications,
+  PRAYER_NOTIFICATION_CHANNEL,
+  PRAYER_CATEGORY_ID,
+  cancelPrayerNotifications,
+  getNotificationStatus 
+} from './notificationService';
 import { Platform } from 'react-native';
 
-// Scheduled notifications için identifier - Context7 best practice
-export const PRAYER_NOTIFICATION_IDENTIFIER = 'prayer-notification';
-export const PRAYER_NOTIFICATION_CHANNEL = 'ezan-vakitleri';
+// Context7 best practice: Güvenilir bildirim sistemi sabitleri
+export const PRAYER_NOTIFICATION_IDENTIFIER = PRAYER_CATEGORY_ID;
+export { PRAYER_NOTIFICATION_CHANNEL };
 
 // Context7 best practice: Notification channel ve identifier'ı düzgün kurulduğundan emin ol - geliştirildi
 const ensureNotificationChannelAndHandler = async () => {
@@ -76,152 +84,210 @@ const ensureNotificationChannelAndHandler = async () => {
   }
 };
 
-// Context7 best practice: Gerçek zamanlı namaz vakti bildirimi - Debug geliştirmesi
+// Context7 best practice: Süper güvenilir namaz vakti bildirimi sistemi
 const scheduleRealTimePrayerNotifications = async () => {
   try {
-    console.log('🔥 Gerçek zamanlı namaz bildirimleri zamanlaması başlıyor...');
+    console.log('🚀 [CONTEXT7] Süper güvenilir namaz bildirimi sistemi başlatılıyor...');
     
-    // Kullanıcı ayarlarını al
+    // Step 1: Kullanıcı ayarlarını doğrula
     const settings = await getUserSettings();
     if (!settings || !settings.notificationsEnabled) {
-      console.log('❌ Bildirimler devre dışı');
+      console.log('❌ Bildirimler kullanıcı tarafından devre dışı');
       return false;
     }
 
-    console.log('✅ Ayarlar doğrulandı:', {
+    if (!settings.activePrayers || settings.activePrayers.length === 0) {
+      console.log('❌ Hiç aktif namaz vakti seçilmemiş');
+      return false;
+    }
+
+    console.log('✅ Kullanıcı ayarları doğrulandı:', {
       notificationsEnabled: settings.notificationsEnabled,
       notifyBeforeMinutes: settings.notifyBeforeMinutes,
       activePrayers: settings.activePrayers,
       city: settings.city
     });
 
-    // Notification channel ve handler'ı kur
+    // Step 2: Sistem hazırlıkları
+    console.log('🔧 Bildirim sistemi hazırlanıyor...');
     const channelReady = await ensureNotificationChannelAndHandler();
     if (!channelReady) {
-      console.error('❌ Notification channel kurulamadı');
+      console.error('❌ Bildirim sistemi hazırlanamadı');
       return false;
     }
 
-    // Namaz vakitlerini al
+    // Step 3: Namaz vakti verilerini al
     const prayerTimesData = await getPrayerTimesData();
     if (!prayerTimesData || prayerTimesData.length === 0) {
       console.log('❌ Namaz vakti verisi bulunamadı');
       return false;
     }
 
-    console.log(`✅ ${prayerTimesData.length} günlük namaz vakitleri hazır`);
+    console.log(`✅ ${prayerTimesData.length} günlük namaz vakitleri yüklendi`);
 
-    // Context7 best practice: Sadece gelecek 7 günlük bildirimleri zamanla
-    const today = new Date();
-    const sevenDaysLater = new Date(today.getTime() + (7 * 24 * 60 * 60 * 1000));
+    // Step 4: Context7 best practice - Gelecek 10 günlük bildirimleri zamanla (7 yerine 10)
+    const now = new Date();
+    const tenDaysLater = new Date(now.getTime() + (10 * 24 * 60 * 60 * 1000));
     
-    console.log(`📅 Zaman aralığı: ${today.toLocaleDateString('tr-TR')} - ${sevenDaysLater.toLocaleDateString('tr-TR')}`);
+    console.log(`📅 Hedef zaman aralığı: ${now.toLocaleDateString('tr-TR')} - ${tenDaysLater.toLocaleDateString('tr-TR')}`);
     
-    let scheduledCount = 0;
-    let skippedCount = 0;
-    let errorCount = 0;
+    let totalScheduled = 0;
+    let totalSkipped = 0;
+    let totalErrors = 0;
+    const schedulingResults = [];
     
+    // Step 5: Günler ve namaz vakitleri için zamanla
     for (const dayData of prayerTimesData) {
       const dayDate = new Date(dayData.date);
       
-      // Sadece gelecek 7 gün için zamanla
-      if (dayDate < today || dayDate > sevenDaysLater) {
-        console.log(`⏭️ ${dayDate.toLocaleDateString('tr-TR')} tarih aralığı dışında, atlanıyor`);
+      // Sadece gelecek 10 gün için işle
+      if (dayDate < now || dayDate > tenDaysLater) {
         continue;
       }
       
-      console.log(`📅 ${dayDate.toLocaleDateString('tr-TR')} için bildirimleri zamanlanıyor...`);
+      const dayResult = {
+        date: dayDate.toLocaleDateString('tr-TR'),
+        scheduled: 0,
+        skipped: 0,
+        errors: 0,
+        prayers: []
+      };
       
-      // Her namaz vakti için bildirim zamanla
+      console.log(`📅 ${dayResult.date} günü işleniyor...`);
+      
+      // Her namaz vakti için
       for (const prayer of dayData.times) {
-        // Kullanıcının aktif ettiği namaz vakitlerini kontrol et
+        const prayerResult = {
+          name: prayer.name,
+          time: prayer.time,
+          status: 'unknown'
+        };
+        
+        // Kullanıcının seçtiği namaz vakitleri kontrolü
         if (!settings.activePrayers.includes(prayer.name)) {
-          console.log(`  ⏩ ${prayer.name} namaz vakti seçili değil, atlanıyor`);
+          prayerResult.status = 'not-selected';
+          console.log(`  ⏩ ${prayer.name} seçili değil`);
           continue;
         }
         
         try {
-          // Namaz vaktini tarih olarak hesapla
+          // Namaz vakti tarih/saat hesaplama
           const [hour, minute] = prayer.time.split(':').map(Number);
           const prayerDateTime = new Date(dayDate);
           prayerDateTime.setHours(hour, minute, 0, 0);
           
-          // Bildirim zamanını hesapla (namaz vaktinden X dakika önce)
+          // Bildirim zamanını hesapla
           const notificationTime = new Date(prayerDateTime.getTime() - (settings.notifyBeforeMinutes * 60 * 1000));
           
           // Geçmiş zaman kontrolü
-          if (notificationTime <= new Date()) {
-            console.log(`  ⌚ ${prayer.name} bildirimi geçmiş zamanda (${notificationTime.toLocaleString('tr-TR')}), atlanıyor`);
-            skippedCount++;
+          if (notificationTime <= now) {
+            prayerResult.status = 'past-time';
+            totalSkipped++;
+            dayResult.skipped++;
+            console.log(`  ⌚ ${prayer.name} geçmiş zamanda, atlanıyor`);
             continue;
           }
           
-          console.log(`  🕐 ${prayer.name} için bildirim zamanlanıyor: ${notificationTime.toLocaleString('tr-TR')}`);
+          console.log(`  🕐 ${prayer.name} zamanlanıyor: ${notificationTime.toLocaleString('tr-TR')}`);
           
-          // Context7 best practice: Doğru channelId ve categoryIdentifier kullan + trigger type eklendi
-          const notificationId = await Notifications.scheduleNotificationAsync({
+          // Context7 best practice: Platform'a özel optimizasyon
+          const notificationConfig = {
             content: {
-              title: `${prayer.name} Namazı Yaklaşıyor`,
+              title: `🕌 ${prayer.name} Namazı Yaklaşıyor`,
               body: `${prayer.name} namazına ${settings.notifyBeforeMinutes} dakika kaldı (${prayer.time})`,
               sound: true,
               priority: Notifications.AndroidNotificationPriority.HIGH,
               categoryIdentifier: PRAYER_NOTIFICATION_IDENTIFIER,
+              sticky: false,
+              autoDismiss: true,
               data: {
                 prayerName: prayer.name,
                 prayerTime: prayer.time,
                 date: dayData.date,
-                notifyBefore: settings.notifyBeforeMinutes,
-                notificationType: 'prayer-reminder'
+                notifyBeforeMinutes: settings.notifyBeforeMinutes,
+                notificationType: 'prayer-reminder',
+                scheduledAt: new Date().toISOString(),
+                triggerTime: notificationTime.toISOString(),
+                city: settings.city
               }
             },
-            trigger: {
-              type: Notifications.SchedulableTriggerInputTypes.DATE, // Context7 fix: eksik type eklendi
+            trigger: Platform.OS === 'android' ? {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
               date: notificationTime,
-              channelId: PRAYER_NOTIFICATION_CHANNEL // Context7 best practice: Android için channelId
+              channelId: PRAYER_NOTIFICATION_CHANNEL,
+              repeats: false
+            } : {
+              type: Notifications.SchedulableTriggerInputTypes.DATE,
+              date: notificationTime,
+              repeats: false
             }
-          });
+          };
           
-          scheduledCount++;
-          console.log(`  ✅ ${prayer.name} bildirimi başarıyla zamanlandı (ID: ${notificationId})`);
+          // Bildirimi zamanla
+          const notificationId = await Notifications.scheduleNotificationAsync(notificationConfig);
+          
+          prayerResult.status = 'scheduled';
+          prayerResult.notificationId = notificationId;
+          prayerResult.triggerTime = notificationTime.toLocaleString('tr-TR');
+          
+          totalScheduled++;
+          dayResult.scheduled++;
+          
+          console.log(`  ✅ ${prayer.name} başarıyla zamanlandı (ID: ${notificationId})`);
+          
+          // Context7: Immediate verification
+          setTimeout(async () => {
+            try {
+              const allNotifications = await Notifications.getAllScheduledNotificationsAsync();
+              const found = allNotifications.find(n => n.identifier === notificationId);
+              if (!found) {
+                console.error(`  ⚠️ ${prayer.name} bildirimi sistemde doğrulanamadı!`);
+              }
+            } catch (verifyError) {
+              console.error(`  ⚠️ ${prayer.name} doğrulama hatası:`, verifyError.message);
+            }
+          }, 200);
           
         } catch (prayerError) {
-          errorCount++;
-          console.error(`  ❌ ${prayer.name} bildirimi zamanlanırken hata:`, prayerError);
-          console.error('  📋 Hata detayları:', {
-            prayerName: prayer.name,
-            prayerTime: prayer.time,
-            date: dayData.date,
-            errorMessage: prayerError.message
-          });
+          prayerResult.status = 'error';
+          prayerResult.error = prayerError.message;
+          totalErrors++;
+          dayResult.errors++;
+          
+          console.error(`  ❌ ${prayer.name} zamanlanamadı:`, prayerError.message);
         }
+        
+        dayResult.prayers.push(prayerResult);
       }
+      
+      schedulingResults.push(dayResult);
+      console.log(`  📊 ${dayResult.date} özeti: ${dayResult.scheduled} zamanlandı, ${dayResult.skipped} atlandı, ${dayResult.errors} hata`);
     }
     
-    console.log('📊 Final Bildirim İstatistikleri:');
-    console.log(`   ✅ Başarıyla zamanlandı: ${scheduledCount} adet`);
-    console.log(`   ⏭️ Atlandı (geçmiş zaman): ${skippedCount} adet`);
-    console.log(`   ❌ Hata ile başarısız: ${errorCount} adet`);
-    console.log(`   📱 Toplam işlenen: ${scheduledCount + skippedCount + errorCount} adet`);
+    // Final rapor
+    console.log('📊 [CONTEXT7] Final Bildirim Raporu:');
+    console.log(`   ✅ Toplam zamanlandı: ${totalScheduled} adet`);
+    console.log(`   ⏭️ Toplam atlandı: ${totalSkipped} adet`);
+    console.log(`   ❌ Toplam hata: ${totalErrors} adet`);
+    console.log(`   📱 Toplam işlem: ${totalScheduled + totalSkipped + totalErrors} adet`);
     
-    // Context7 best practice: Hemen sonuç kontrol et
-    if (scheduledCount > 0) {
-      console.log('🔍 Zamanlanmış bildirimleri hemen kontrol ediliyor...');
+    // Context7 best practice: Sistem durumu kontrolü
+    if (totalScheduled > 0) {
       setTimeout(async () => {
-        const currentNotifications = await Notifications.getAllScheduledNotificationsAsync();
-        console.log(`📊 Sistem genelinde toplam zamanlanmış bildirim: ${currentNotifications.length} adet`);
+        console.log('🔍 Sistem doğrulaması yapılıyor...');
+        const status = await getNotificationStatus();
+        console.log(`📊 Sistem durumu: ${status.prayerNotifications}/${totalScheduled} bildirim doğrulandı`);
         
-        const prayerNotifs = currentNotifications.filter(n => 
-          n.content.categoryIdentifier === PRAYER_NOTIFICATION_IDENTIFIER ||
-          n.content.data?.notificationType === 'prayer-reminder'
-        );
-        console.log(`🕌 Bunların ${prayerNotifs.length} adedi namaz bildirimi`);
+        if (status.prayerNotifications < totalScheduled) {
+          console.warn(`⚠️ Zamanlamanın ${totalScheduled - status.prayerNotifications} adedi eksik!`);
+        }
       }, 1000);
     }
     
-    return scheduledCount > 0;
+    return totalScheduled > 0;
     
   } catch (error) {
-    console.error('💥 KRITIK HATA: Namaz bildirimleri zamanlanırken hata:', error);
+    console.error('💥 [CONTEXT7] KRITIK HATA: Namaz bildirimi sistemi başarısız:', error);
     return false;
   }
 };
@@ -267,87 +333,137 @@ export const cancelAllPrayerNotifications = async () => {
   }
 };
 
-// Bildirim sistemini başlat - Context7 best practice ile debug eklendi
+// Context7 best practice: Süper güvenilir namaz bildirim sistemi başlatması
 export const initializePrayerNotifications = async () => {
   try {
-    console.log('🚀 Namaz bildirim sistemi başlatılıyor...');
+    console.log('🚀 [CONTEXT7] Süper güvenilir namaz bildirim sistemi başlatılıyor...');
     
-    // Step 1: Kullanıcı ayarlarını kontrol et
-    console.log('📋 1. Kullanıcı ayarları kontrol ediliyor...');
+    // Step 1: Sistem izinleri ve hazırlık
+    console.log('🔧 1. Sistem izinleri kontrol ediliyor...');
+    const permissionGranted = await requestNotificationPermissions();
+    if (!permissionGranted) {
+      console.error('❌ Bildirim izni alınamadı');
+      return false;
+    }
+    
+    // Step 2: Notification system setup
+    console.log('🔧 2. Bildirim sistemi hazırlanıyor...');
+    configureNotifications();
+    await createNotificationChannel();
+    
+    // Step 3: Kullanıcı ayarlarını doğrula
+    console.log('📋 3. Kullanıcı ayarları kontrol ediliyor...');
     const settings = await getUserSettings();
     
     if (!settings) {
-      console.log('❌ HATA: Kullanıcı ayarları bulunamadı');
+      console.error('❌ Kullanıcı ayarları bulunamadı');
       return false;
     }
     
     console.log('✅ Kullanıcı ayarları yüklendi:', {
       notificationsEnabled: settings.notificationsEnabled,
       notifyBeforeMinutes: settings.notifyBeforeMinutes,
-      activePrayers: settings.activePrayers,
+      activePrayers: settings.activePrayers?.length || 0,
       city: settings.city
     });
     
     if (!settings.notificationsEnabled) {
-      console.log('❌ Bildirimler kullanıcı tarafından devre dışı bırakılmış');
+      console.log('❌ Bildirimler kullanıcı tarafından devre dışı');
       return false;
     }
     
     if (!settings.activePrayers || settings.activePrayers.length === 0) {
-      console.log('❌ Hiç aktif namaz vakti seçilmemiş');
+      console.error('❌ Hiç aktif namaz vakti seçilmemiş');
       return false;
     }
     
-    // Step 2: Namaz vakti verilerini kontrol et
-    console.log('📋 2. Namaz vakti verileri kontrol ediliyor...');
+    // Step 4: Namaz vakti verilerini kontrol et
+    console.log('📋 4. Namaz vakti verileri kontrol ediliyor...');
     const prayerTimesData = await getPrayerTimesData();
     
     if (!prayerTimesData || prayerTimesData.length === 0) {
-      console.log('❌ HATA: Namaz vakti verisi bulunamadı');
+      console.error('❌ Namaz vakti verisi bulunamadı');
       return false;
     }
     
     console.log(`✅ ${prayerTimesData.length} günlük namaz vakitleri bulundu`);
     
-    // Step 3: Mevcut bildirimleri temizle
-    console.log('📋 3. Mevcut namaz bildirimleri temizleniyor...');
-    await cancelAllPrayerNotifications();
-    
-    // Step 4: Notification channel ve handler kurulumu
-    console.log('📋 4. Notification channel ve handler kuruluyor...');
-    const channelReady = await ensureNotificationChannelAndHandler();
-    if (!channelReady) {
-      console.log('❌ HATA: Notification channel kurulamadı');
-      return false;
+    // Step 5: Context7 best practice - Mevcut bildirimleri temizle (sadece namaz bildirimleri)
+    console.log('🧹 5. Mevcut namaz bildirimleri temizleniyor...');
+    const cleanupSuccess = await cancelPrayerNotifications();
+    if (!cleanupSuccess) {
+      console.warn('⚠️ Önceki bildirimler tamamen temizlenemedi, devam ediliyor...');
     }
     
-    // Step 5: Yeni bildirimleri zamanla
-    console.log('📋 5. Yeni namaz bildirimleri zamanlanıyor...');
+    // Step 6: Context7 - Sistem durumu pre-check
+    console.log('🔍 6. Sistem ön kontrolü yapılıyor...');
+    const preStatus = await getNotificationStatus();
+    console.log(`📊 Ön durum: ${preStatus.total} toplam, ${preStatus.prayerNotifications} namaz bildirimi`);
+    
+    // Step 7: Yeni bildirimleri zamanla
+    console.log('🚀 7. Yeni namaz bildirimleri zamanlanıyor...');
     const success = await scheduleRealTimePrayerNotifications();
     
-    // Step 6: Sonuç kontrolü
-    console.log('📋 6. Sonuç kontrol ediliyor...');
+    // Step 8: Context7 best practice - Comprehensive final verification
+    console.log('🔍 8. Kapsamlı doğrulama yapılıyor...');
     if (success) {
       console.log('✅ Namaz bildirim sistemi başarıyla başlatıldı');
       
-      // Context7 best practice: Hemen durum kontrolü yap
+      // Context7: Immediate verification (500ms sonra)
       setTimeout(async () => {
-        console.log('🔍 Sistem durumu 2 saniye sonra kontrol ediliyor...');
-        const status = await checkPrayerNotificationStatus();
-        console.log('📊 Anlık durum:', {
-          scheduledCount: status.scheduledCount,
-          totalScheduled: status.totalScheduled,
-          isActive: status.isActive
-        });
-      }, 2000);
+        try {
+          console.log('🔍 Hızlı doğrulama (500ms sonra)...');
+          const quickStatus = await getNotificationStatus();
+          console.log(`📊 Hızlı durum: ${quickStatus.prayerNotifications} namaz bildirimi aktif`);
+          
+          if (quickStatus.prayerNotifications === 0) {
+            console.error('⚠️ UYARI: Bildirimi zamanlandı ama sistem bulamıyor!');
+          }
+        } catch (quickError) {
+          console.error('⚠️ Hızlı doğrulama hatası:', quickError.message);
+        }
+      }, 500);
+      
+      // Context7: Extended verification (3 seconds later)
+      setTimeout(async () => {
+        try {
+          console.log('🔍 Detaylı doğrulama (3 saniye sonra)...');
+          const detailedStatus = await getNotificationStatus();
+          
+          console.log('📊 Detaylı sistem durumu:', {
+            totalNotifications: detailedStatus.total,
+            prayerNotifications: detailedStatus.prayerNotifications,
+            upcomingIn24Hours: detailedStatus.upcomingIn24Hours,
+            systemStatus: detailedStatus.prayerNotifications > 0 ? 'ACTIVE' : 'INACTIVE'
+          });
+          
+          // Context7: Performance analytics
+          const expectedMinimum = Math.min(settings.activePrayers.length, 5); // En az bugün + yarın için
+          if (detailedStatus.prayerNotifications < expectedMinimum) {
+            console.warn(`⚠️ PERFORMANS UYARISI: ${detailedStatus.prayerNotifications}/${expectedMinimum} beklenen minimum altında`);
+          } else {
+            console.log(`✅ PERFORMANS OK: ${detailedStatus.prayerNotifications} bildirim başarıyla zamanlandı`);
+          }
+          
+          // Context7: Next 24 hours analysis
+          if (detailedStatus.upcomingIn24Hours > 0) {
+            console.log(`📅 Gelecek 24 saat: ${detailedStatus.upcomingIn24Hours} bildirim gelecek`);
+          } else {
+            console.warn('⚠️ Gelecek 24 saatte hiç bildirim yok!');
+          }
+          
+        } catch (detailedError) {
+          console.error('⚠️ Detaylı doğrulama hatası:', detailedError.message);
+        }
+      }, 3000);
       
     } else {
-      console.log('❌ Namaz bildirim sistemi başlatılamadı - bildirim zamanlanamadı');
+      console.error('❌ Namaz bildirim sistemi başlatılamadı');
     }
     
     return success;
   } catch (error) {
-    console.error('💥 KRITIK HATA: Namaz bildirim sistemi başlatılırken hata:', error);
+    console.error('💥 [CONTEXT7] KRITIK HATA: Namaz bildirim sistemi başlatma hatası:', error);
     return false;
   }
 };
@@ -365,104 +481,77 @@ export const stopPrayerNotifications = async () => {
   }
 };
 
-// Bildirim durumunu kontrol et - Context7 best practice ile tamamen yenilendi
+// Context7 best practice: Yeni notification service ile uyumlu durum kontrolü
 export const checkPrayerNotificationStatus = async () => {
   try {
-    console.log('🔍 Bildirim durumu detaylı analizi başlıyor...');
+    console.log('🔍 [CONTEXT7] Bildirim durumu analizi başlıyor...');
     
-    const scheduledNotifications = await Notifications.getAllScheduledNotificationsAsync();
-    console.log(`📊 Toplam zamanlanmış bildirim sayısı: ${scheduledNotifications.length}`);
+    // Yeni notification service'den durum al
+    const status = await getNotificationStatus();
     
-    // Context7 best practice: Detaylı debug analizi
-    if (scheduledNotifications.length > 0) {
-      console.log('🔍 Zamanlanmış bildirimlerin detayları:');
-      scheduledNotifications.forEach((notif, index) => {
-        const category = notif.content.categoryIdentifier || 'YOK';
-        const notifType = notif.content.data?.notificationType || 'YOK';
-        const prayerName = notif.content.data?.prayerName || 'YOK';
-        
-        console.log(`${index + 1}. "${notif.content.title}"`);
-        console.log(`   Category: "${category}"`);
-        console.log(`   Type: "${notifType}"`);
-        console.log(`   Prayer: "${prayerName}"`);
-        console.log(`   Trigger: ${notif.trigger?.date ? new Date(notif.trigger.date).toLocaleString('tr-TR') : 'YOK'}`);
-        console.log('---');
-      });
-    }
-    
-    // Context7 best practice: Çoklu filtreleme stratejisi
-    const prayerNotifications = scheduledNotifications.filter(notification => {
-      const hasCorrectCategory = notification.content.categoryIdentifier === PRAYER_NOTIFICATION_IDENTIFIER;
-      const hasCorrectType = notification.content.data?.notificationType === 'prayer-reminder';
-      const hasPrayerData = notification.content.data?.prayerName;
-      const hasPrayerInTitle = notification.content.title && (
-        notification.content.title.includes('Namaz') || 
-        notification.content.title.includes('Ezan') ||
-        notification.content.title.includes('İmsak') ||
-        notification.content.title.includes('Güneş') ||
-        notification.content.title.includes('Öğle') ||
-        notification.content.title.includes('İkindi') ||
-        notification.content.title.includes('Akşam') ||
-        notification.content.title.includes('Yatsı')
-      );
-      
-      const isMatching = hasCorrectCategory || hasCorrectType || hasPrayerData || hasPrayerInTitle;
-      
-      if (isMatching) {
-        console.log(`✅ Namaz bildirimi bulundu: "${notification.content.title}"`);
-        console.log(`   Kriterler: Category=${hasCorrectCategory}, Type=${hasCorrectType}, Data=${hasPrayerData}, Title=${hasPrayerInTitle}`);
-      }
-      
-      return isMatching;
+    console.log('📊 Sistem durumu raporu:', {
+      totalNotifications: status.total,
+      prayerNotifications: status.prayerNotifications,
+      upcomingIn24Hours: status.upcomingIn24Hours,
+      hasError: !!status.error
     });
     
-    console.log(`🕌 Toplam namaz bildirimi sayısı: ${prayerNotifications.length}`);
-    
-    // Context7 best practice: Namaz bildirimlerini analiz et
-    if (prayerNotifications.length > 0) {
-      console.log('📋 Bulunan namaz bildirimleri:');
-      prayerNotifications.slice(0, 5).forEach((notif, index) => {
-        const triggerDate = notif.trigger?.date ? new Date(notif.trigger.date) : null;
-        const timeStr = triggerDate ? triggerDate.toLocaleString('tr-TR') : 'Belirsiz';
-        console.log(`${index + 1}. ${notif.content.title} → ${timeStr}`);
-      });
+    // Context7: Detaylı bildirim analizi
+    if (status.prayerNotifications > 0) {
+      console.log(`✅ ${status.prayerNotifications} namaz bildirimi aktif`);
       
-      if (prayerNotifications.length > 5) {
-        console.log(`... ve ${prayerNotifications.length - 5} adet daha`);
+      // Gelecek 24 saatteki bildirimleri göster
+      if (status.upcomingNotifications && status.upcomingNotifications.length > 0) {
+        console.log('📅 Gelecek 24 saatteki bildirimler:');
+        status.upcomingNotifications.slice(0, 5).forEach((notif, index) => {
+          const triggerDate = notif.trigger?.date ? new Date(notif.trigger.date) : null;
+          const timeStr = triggerDate ? triggerDate.toLocaleString('tr-TR') : 'Belirsiz';
+          const prayerName = notif.data?.prayerName || 'Belirsiz';
+          console.log(`${index + 1}. ${prayerName} → ${timeStr}`);
+        });
+        
+        if (status.upcomingNotifications.length > 5) {
+          console.log(`... ve ${status.upcomingNotifications.length - 5} adet daha`);
+        }
       }
     } else {
-      console.log('❌ Hiç namaz bildirimi bulunamadı!');
+      console.log('❌ Hiç namaz bildirimi bulunamadı');
       
-      // Context7 best practice: Sorun teşhisi
-      if (scheduledNotifications.length > 0) {
-        console.log('⚠️ Bildirimler var ama namaz bildirimi değil. İlk 3 örnek:');
-        scheduledNotifications.slice(0, 3).forEach((notif, index) => {
-          console.log(`${index + 1}. "${notif.content.title}" (Category: "${notif.content.categoryIdentifier || 'YOK'}")`);
-        });
+      if (status.total > 0) {
+        console.log(`⚠️ Sistemde ${status.total} bildirim var ama hiçbiri namaz bildirimi değil`);
       } else {
-        console.log('💡 Hiç bildirim zamanlanmamış. Sistemi yeniden başlatmayı deneyin.');
+        console.log('💡 Hiç bildirim zamanlanmamış');
       }
     }
     
+    // Context7: Error handling
+    if (status.error) {
+      console.error('⚠️ Bildirim sistemi hatası:', status.error);
+    }
+    
+    // Eski format ile uyumluluk için dönüştür
     return {
-      isActive: prayerNotifications.length > 0,
-      scheduledCount: prayerNotifications.length,
-      totalScheduled: scheduledNotifications.length,
-      notifications: prayerNotifications.map(n => ({
+      isActive: status.prayerNotifications > 0,
+      scheduledCount: status.prayerNotifications,
+      totalScheduled: status.total,
+      upcomingIn24Hours: status.upcomingIn24Hours,
+      notifications: status.notifications ? status.notifications.map(n => ({
         identifier: n.identifier,
-        title: n.content.title,
-        body: n.content.body,
+        title: n.content?.title || 'Bilinmiyor',
+        body: n.content?.body || '',
         trigger: n.trigger,
-        categoryIdentifier: n.content.categoryIdentifier,
-        data: n.content.data
-      }))
+        categoryIdentifier: n.content?.categoryIdentifier,
+        data: n.content?.data || {}
+      })) : [],
+      error: status.error
     };
   } catch (error) {
-    console.error('❌ Bildirim durumu kontrol edilirken hata:', error);
+    console.error('❌ [CONTEXT7] Bildirim durumu kontrol hatası:', error);
     return {
       isActive: false,
       scheduledCount: 0,
       totalScheduled: 0,
+      upcomingIn24Hours: 0,
       notifications: [],
       error: error.message
     };
